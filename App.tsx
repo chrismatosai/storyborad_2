@@ -1,22 +1,16 @@
-
-import React, { useState, useCallback, useRef, MouseEvent, useLayoutEffect, useEffect } from 'react';
-import { NodeType, Node, CharacterData, SettingData, ScriptData, ImageData, ConnectorPosition, TransformationData } from './types/graph';
+import React, { useState, useRef, MouseEvent, useEffect, useCallback } from 'react';
+import { NodeType } from './types/graph';
 import { useViewport } from './hooks/useViewport';
 import { useGraphEditor } from './hooks/useGraphEditor';
 import { useGeminiGenerator } from './hooks/useGeminiGenerator';
 import { useSmartConnections } from './hooks/useSmartConnections';
-import { useConnectionEnricher } from './hooks/useConnectionEnricher'; // Import new hook
-import { enrichSceneDescription } from './services/promptArchitect'; // Import service
+import { useConnectionEnricher } from './hooks/useConnectionEnricher';
+import { enrichSceneDescription } from './services/promptArchitect';
 import { usePersistence } from './hooks/usePersistence';
 
 // UI Components
-import { BaseNode } from './components/nodes/BaseNode';
-import { CharacterNode } from './components/nodes/CharacterNode';
-import { SettingNode } from './components/nodes/SettingNode';
-import { ScriptNode } from './components/nodes/ScriptNode';
-import { ImageNode } from './components/nodes/ImageNode';
-import { TransformationNode } from './components/nodes/TransformationNode';
 import { NODE_CONFIG } from './components/nodes/nodeConfig';
+import { FlowCanvas } from './components/layout/FlowCanvas';
 
 // Main App Component
 export default function App() {
@@ -76,9 +70,6 @@ export default function App() {
   useConnectionEnricher(nodes, connections, actions.updateNodeData, enrichSceneDescription);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const connectorRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const contentWrapperRef = useRef<HTMLDivElement>(null);
-  const [connectorPositions, setConnectorPositions] = useState<Record<string, ConnectorPosition>>({});
 
   const handleSave = () => {
     const dataToSave = JSON.stringify({ nodes, connections }, null, 2);
@@ -139,10 +130,6 @@ export default function App() {
     actions.setGraph({ nodes: [], connections: [] });
     setIsConfirmingReset(false); // Resetear botón
   };
-  
-  const checkInputConnection = useCallback((nodeId: string, inputIndex: number) => {
-    return connections.some(c => c.toNodeId === nodeId && c.toInputIndex === inputIndex);
-  }, [connections]);
   
   const screenToWorld = useCallback(({ x, y }: { x: number; y: number }): { x: number; y: number } => {
     if (!containerRef.current) return { x, y };
@@ -212,57 +199,6 @@ export default function App() {
     setDraggingNode(null);
     setConnecting(null);
   };
-  
-  useLayoutEffect(() => {
-    const newPositions: Record<string, ConnectorPosition> = {};
-    if (!contentWrapperRef.current) {
-        return;
-    }
-
-    Object.entries(connectorRefs.current).forEach(([key, el]) => {
-      const element = el as HTMLDivElement | null;
-      if (element) {
-        const nodeDiv = element.closest('[data-node-id]');
-        if(!nodeDiv) return;
-
-        const nodeId = nodeDiv.getAttribute('data-node-id');
-        if (!nodeId) return;
-        
-        const nodeRect = nodeDiv.getBoundingClientRect();
-        const elRect = element.getBoundingClientRect();
-        const contentRect = contentWrapperRef.current!.getBoundingClientRect();
-
-        const nodeWorldX = (nodeRect.left - contentRect.left) / viewTransform.zoom;
-        const nodeWorldY = (nodeRect.top - contentRect.top) / viewTransform.zoom;
-
-        const elWorldX = nodeWorldX + (elRect.left - nodeRect.left + elRect.width / 2) / viewTransform.zoom;
-        const elWorldY = nodeWorldY + (elRect.top - nodeRect.top + elRect.height / 2) / viewTransform.zoom;
-        
-        newPositions[key] = {
-          nodeId,
-          index: 0, 
-          position: {
-            x: elWorldX,
-            y: elWorldY,
-          }
-        };
-      }
-    });
-    
-    setConnectorPositions(currentPositions => {
-      if (Object.keys(newPositions).length !== Object.keys(currentPositions).length) {
-        return newPositions;
-      }
-      for (const key in newPositions) {
-        if (!currentPositions[key] || 
-            newPositions[key].position.x !== currentPositions[key].position.x || 
-            newPositions[key].position.y !== currentPositions[key].position.y) {
-          return newPositions;
-        }
-      }
-      return currentPositions;
-    });
-  }, [nodes, viewTransform, nodes.length, ...nodes.map(n => n.position.x + n.position.y + (n.type === NodeType.Script ? (n.data as ScriptData).scenes.length : 0))]); 
 
   const connectingToPos = connecting ? screenToWorld(connecting.toPosition) : {x:0,y:0};
 
@@ -285,7 +221,6 @@ export default function App() {
         onMouseDown={onCanvasMouseDown}
         onWheel={viewportHandlers.onWheel}
     >
-      {/* ... (Existing JSX) ... */}
       {/* Toolbar */}
       <div className="absolute top-4 left-4 z-20 flex gap-2 p-2 bg-gray-800/80 backdrop-blur-sm rounded-lg shadow-lg flex-wrap max-w-[90vw]">
         {(Object.keys(NodeType) as Array<keyof typeof NodeType>).map(key => (
@@ -321,96 +256,23 @@ export default function App() {
         </div>
       </div>
 
-    <div
-        ref={contentWrapperRef}
-        style={{
-            transform: `translate(${viewTransform.x}px, ${viewTransform.y}px) scale(${viewTransform.zoom})`,
-            transformOrigin: '0 0',
-        }}
-    >
-        <svg className="absolute top-0 left-0 w-full h-full pointer-events-none z-0" style={{width: '1000vw', height: '1000vh'}}>
-            <defs>
-                <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                    <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280" />
-                </marker>
-            </defs>
-            {connections.map(conn => {
-            const fromKey = `output-${conn.fromNodeId}-${conn.fromOutput}`;
-            const toKey = `input-${conn.toNodeId}-${conn.toInputIndex}`;
-            const fromPos = connectorPositions[fromKey]?.position;
-            const toPos = connectorPositions[toKey]?.position;
-            if (!fromPos || !toPos) return null;
-            const path = `M ${fromPos.x},${fromPos.y} C ${fromPos.x + 50},${fromPos.y} ${toPos.x - 50},${toPos.y} ${toPos.x},${toPos.y}`;
-            return <path key={conn.id} d={path} stroke="#6b7280" strokeWidth={2 / viewTransform.zoom} fill="none" markerEnd="url(#arrow)" />;
-            })}
-            {connecting && (() => {
-            const fromKey = `output-${connecting.fromNodeId}-${connecting.fromOutput}`;
-            const fromPos = connectorPositions[fromKey]?.position;
-            if (!fromPos) return null;
-            const toPos = connectingToPos;
-            const path = `M ${fromPos.x},${fromPos.y} C ${fromPos.x + 50},${fromPos.y} ${toPos.x - 50},${toPos.y} ${toPos.x},${toPos.y}`;
-            return <path d={path} stroke="#a78bfa" strokeWidth={2 / viewTransform.zoom} fill="none" strokeDasharray={`${5/viewTransform.zoom},${5/viewTransform.zoom}`}/>;
-            })()}
-        </svg>
-
-
-        {nodes.map(node => {
-            const config = NODE_CONFIG[node.type];
-            
-            return (
-              <BaseNode
-                key={node.id}
-                node={node}
-                config={config}
-                onNodeMouseDown={onNodeMouseDown}
-                onDelete={actions.deleteNode}
-                onConnectorMouseDown={onConnectorMouseDown}
-                onConnectorMouseUp={onConnectorMouseUp}
-                onDisconnectInput={actions.disconnectInput}
-                checkInputConnection={(index) => checkInputConnection(node.id, index)}
-                connectorRefs={connectorRefs}
-              >
-                {node.type === NodeType.Character && (
-                  <CharacterNode node={node as Node<CharacterData>} updateNodeData={actions.updateNodeData} />
-                )}
-                {node.type === NodeType.Setting && (
-                  <SettingNode node={node as Node<SettingData>} updateNodeData={actions.updateNodeData} />
-                )}
-                {node.type === NodeType.Script && (
-                   <ScriptNode
-                     node={node as Node<ScriptData>}
-                     updateNodeData={actions.updateNodeData}
-                     addScene={actions.addScene}
-                     deleteScene={actions.deleteScene}
-                     connectorRefs={connectorRefs}
-                     onConnectorMouseDown={onConnectorMouseDown}
-                     onConnectorMouseUp={onConnectorMouseUp}
-                     onDisconnectInput={actions.disconnectInput}
-                     // Calculate all connected nodes for this script node
-                     connectedNodes={
-                        connections
-                            .filter(c => c.toNodeId === node.id)
-                            .map(c => nodes.find(n => n.id === c.fromNodeId))
-                            .filter((n): n is Node => !!n)
-                     }
-                   />
-                )}
-                {node.type === NodeType.Image && (
-                  <ImageNode 
-                    node={node as Node<ImageData>} 
-                    updateNodeData={actions.updateNodeData} 
-                    onGenerate={generateImage}
-                    connectorRefs={connectorRefs} 
-                    onConnectorMouseDown={onConnectorMouseDown}
-                  />
-                )}
-                {node.type === NodeType.Transformation && (
-                  <TransformationNode node={node as Node<TransformationData>} updateNodeData={actions.updateNodeData} />
-                )}
-              </BaseNode>
-            );
-        })}
-      </div>
+      <FlowCanvas 
+        nodes={nodes}
+        connections={connections}
+        viewTransform={viewTransform}
+        onNodeMouseDown={onNodeMouseDown}
+        onConnectorMouseDown={onConnectorMouseDown}
+        onConnectorMouseUp={onConnectorMouseUp}
+        onCanvasMouseDown={onCanvasMouseDown}
+        onDeleteNode={actions.deleteNode}
+        onDisconnectInput={actions.disconnectInput}
+        updateNodeData={actions.updateNodeData}
+        addScene={actions.addScene}
+        deleteScene={actions.deleteScene}
+        generateImage={generateImage}
+        connecting={connecting}
+        connectingToPos={connectingToPos}
+      />
 
       {/* Persistence Status Indicator & New Project Button */}
       <div className="absolute bottom-4 right-4 flex items-center gap-3 z-50">
