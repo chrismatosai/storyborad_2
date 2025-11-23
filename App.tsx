@@ -1,4 +1,4 @@
-import React, { useState, useRef, MouseEvent, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useRef, MouseEvent, useEffect } from 'react';
 import { NodeType } from './types/graph';
 import { useViewport } from './hooks/useViewport';
 import { useGraphEditor } from './hooks/useGraphEditor';
@@ -150,7 +150,6 @@ export default function App() {
   
   const [draggingNode, setDraggingNode] = useState<{ id: string; offset: { x: number; y: number } } | null>(null);
 
-
   const onConnectorMouseDown = (e: MouseEvent<HTMLDivElement>, nodeId: string, output: string | number) => {
     e.stopPropagation();
     setConnecting({ fromNodeId: nodeId, fromOutput: output, toPosition: { x: e.clientX, y: e.clientY } });
@@ -172,10 +171,6 @@ export default function App() {
         toInputIndex: inputIndex,
     });
     setConnecting(null);
-  };
-
-  const onCanvasMouseDown = (e: MouseEvent<HTMLDivElement>) => {
-    viewportHandlers.onMouseDown(e);
   };
   
   const onMouseMove = (e: MouseEvent<HTMLDivElement>) => {
@@ -218,7 +213,7 @@ export default function App() {
         ref={containerRef} 
         onMouseMove={onMouseMove} 
         onMouseUp={onMouseUp}
-        onMouseDown={onCanvasMouseDown}
+        onMouseDown={viewportHandlers.onMouseDown} // Use viewport handlers for background pan
         onWheel={viewportHandlers.onWheel}
     >
       {/* Toolbar */}
@@ -263,7 +258,7 @@ export default function App() {
         onNodeMouseDown={onNodeMouseDown}
         onConnectorMouseDown={onConnectorMouseDown}
         onConnectorMouseUp={onConnectorMouseUp}
-        onCanvasMouseDown={onCanvasMouseDown}
+        onCanvasMouseDown={viewportHandlers.onMouseDown}
         onDeleteNode={actions.deleteNode}
         onDisconnectInput={actions.disconnectInput}
         updateNodeData={actions.updateNodeData}
