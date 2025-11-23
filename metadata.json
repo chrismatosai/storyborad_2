@@ -1,0 +1,5 @@
+{
+  "name": "AI Storyboard Generator v2.0",
+  "description": "A canvas-based application to generate visual storyboards from scripts using a node system and AI image generation.",
+  "requestFramePermissions": []
+}
