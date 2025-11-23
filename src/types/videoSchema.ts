@@ -1,3 +1,4 @@
+
 import { FacialComposite } from './cinematicSchema';
 
 export interface VideoMetadata {

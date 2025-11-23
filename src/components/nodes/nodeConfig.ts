@@ -1,3 +1,4 @@
+
 import { NodeType } from '../../types/graph';
 
 export interface NodeConfigItem {
