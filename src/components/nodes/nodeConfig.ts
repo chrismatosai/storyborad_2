@@ -45,7 +45,7 @@ export const NODE_CONFIG: Record<NodeType, NodeConfigItem> = {
     color: 'bg-pink-800',
   },
   [NodeType.Video]: {
-    title: 'Veo 3.1 Video',
+    title: 'Video Prompter',
     width: 340,
     inputs: ['Start Frame', 'End Frame'],
     outputs: ['Video URL'],
