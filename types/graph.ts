@@ -78,9 +78,10 @@ export interface ImageData extends NodeData {
 
 export interface TransformationData extends NodeData {
   modificationPrompt: string;
-  transformationJson?: Partial<CinematicPrompt> | null;
+  transformationJson?: CinematicJSON | null;
   isProcessing?: boolean;
   referenceImage?: string; // base64 from connected Image Node
+  sourceJson?: CinematicJSON | null;
 }
 
 export interface VideoData extends NodeData {

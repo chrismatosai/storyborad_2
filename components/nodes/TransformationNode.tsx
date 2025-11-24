@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Node, TransformationData } from '../../types/graph';
-import { enrichSceneDescription } from '../../services/promptArchitect';
+import { transformCinematicSpec } from '../../services/promptArchitect'; // <--- Usamos la nueva función inteligente
+import { CinematicInspector } from '../ui/CinematicInspector';
+import { CinematicJSON } from '../../types/cinematicSchema';
 
 interface TransformationNodeProps {
   node: Node<TransformationData>;
@@ -8,28 +10,29 @@ interface TransformationNodeProps {
 }
 
 export const TransformationNode = React.memo(({ node, updateNodeData }: TransformationNodeProps) => {
-  const [isJsonViewOpen, setIsJsonViewOpen] = useState(true); // Default open to show specs
-  const [copied, setCopied] = useState(false);
+  const [isPromptOpen, setIsPromptOpen] = useState(true);
 
   const handlePromptChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     updateNodeData(node.id, { modificationPrompt: e.target.value });
   };
 
-  const handleCopy = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (node.data.transformationJson) {
-          navigator.clipboard.writeText(JSON.stringify(node.data.transformationJson, null, 2));
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-      }
-  };
-
   const processTransformation = async () => {
     if (!node.data.modificationPrompt.trim()) return;
+    
+    // Validación: Necesitamos una fuente para transformar
+    if (!node.data.sourceJson) {
+        console.warn("Transformation Node: No source JSON to transform. Connect an Image Node first.");
+        return;
+    }
 
     updateNodeData(node.id, { isProcessing: true });
     try {
-      const resultJson = await enrichSceneDescription(node.data.modificationPrompt);
+      // Usamos la nueva lógica que mezcla Original + Cambios
+      const resultJson = await transformCinematicSpec(
+          node.data.sourceJson as CinematicJSON, 
+          node.data.modificationPrompt
+      );
+      
       updateNodeData(node.id, { 
         isProcessing: false, 
         transformationJson: resultJson 
@@ -40,78 +43,77 @@ export const TransformationNode = React.memo(({ node, updateNodeData }: Transfor
     }
   };
 
+  const isReady = !!node.data.transformationJson;
+
   return (
     <div className="p-3 space-y-3">
       
-      {/* Reference Image Preview */}
-      {node.data.referenceImage ? (
-         <div className="flex items-center gap-2 bg-gray-900/50 p-2 rounded border border-gray-700">
+      {/* HEADER: Reference Status */}
+      <div className={`flex items-center gap-2 p-2 rounded border ${node.data.sourceJson ? 'bg-green-900/20 border-green-600/50' : 'bg-gray-800 border-gray-700 border-dashed'}`}>
+         {node.data.referenceImage ? (
              <img 
                 src={`data:image/png;base64,${node.data.referenceImage}`} 
                 alt="Ref" 
-                className="w-10 h-10 object-cover rounded border border-gray-600"
+                className="w-8 h-8 object-cover rounded border border-green-500/50"
              />
-             <div className="text-xs text-gray-300">
-                <span className="block font-bold text-pink-300">Ref Image Linked</span>
-                <span className="text-[10px] text-gray-500">Source Ready</span>
-             </div>
+         ) : (
+             <div className="w-8 h-8 rounded bg-gray-900 flex items-center justify-center text-gray-600 text-[8px]">Ref?</div>
+         )}
+         <div className="flex-1 min-w-0">
+            <span className={`block text-[10px] font-bold ${node.data.sourceJson ? 'text-green-400' : 'text-gray-500'}`}>
+                {node.data.sourceJson ? 'LINKED & READY' : 'WAITING FOR INPUT'}
+            </span>
+            <span className="text-[9px] text-gray-400 truncate block">
+                {node.data.sourceJson ? 'Source Scene Data Loaded' : 'Connect Image Node...'}
+            </span>
          </div>
-      ) : (
-        <div className="text-xs text-gray-400 italic p-2 bg-gray-900/30 rounded border border-gray-700 border-dashed text-center">
-           Connect an Image Node (Left) to set Reference.
-        </div>
-      )}
+      </div>
 
-      {/* Modification Prompt Input */}
+      {/* INPUT: Modification Prompt */}
       <div>
-        <label className="block text-xs font-bold text-gray-400 mb-1">Transformation Prompt</label>
+        <div className="flex justify-between items-center mb-1">
+            <label className="text-[10px] font-bold text-pink-400 uppercase">Transformation Request</label>
+            {node.data.isProcessing && <span className="text-[9px] text-pink-300 animate-pulse">Processing...</span>}
+        </div>
         <textarea
-          className="w-full p-2 bg-gray-700 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500 text-sm"
-          placeholder="e.g., Change time of day to sunset..."
+          className="w-full p-2 bg-gray-900/50 rounded border border-pink-500/30 focus:border-pink-500 focus:outline-none text-xs text-gray-300 resize-y font-mono"
+          placeholder="e.g., Change lighting to cyberpunk neon, make it rain..."
           value={node.data.modificationPrompt || ''}
           onChange={handlePromptChange}
-          onBlur={processTransformation}
+          onBlur={processTransformation} // Trigger on blur
           rows={3}
         />
       </div>
 
-      {/* Unified JSON Inspector Style */}
-      <div className="bg-gray-900 rounded-md border border-pink-900/50 overflow-hidden shadow-inner">
+      {/* OUTPUT: Spec Inspector */}
+      <div className="bg-gray-950 rounded border border-pink-900/50 overflow-hidden">
         <div 
-            onClick={() => setIsJsonViewOpen(!isJsonViewOpen)}
-            className="flex justify-between items-center p-2 bg-pink-900/20 border-b border-pink-700/30 cursor-pointer hover:bg-pink-900/30 transition-colors"
+            onClick={() => setIsPromptOpen(!isPromptOpen)}
+            className="flex justify-between items-center px-2 py-1.5 bg-pink-900/20 border-b border-pink-700/30 cursor-pointer hover:bg-pink-900/30 transition-colors"
         >
-            <span className="text-[10px] uppercase tracking-wider font-bold text-pink-400">Spec JSON</span>
             <div className="flex items-center gap-2">
-                 {/* Processing Spinner */}
-                 {node.data.isProcessing && (
-                    <svg className="animate-spin h-3 w-3 text-pink-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                 )}
-                 {/* Copy Button */}
-                 {node.data.transformationJson && (
-                     <button 
-                        onClick={handleCopy}
-                        className="text-[10px] bg-black/40 hover:bg-pink-500/20 text-pink-200 px-2 py-0.5 rounded transition-all"
-                     >
-                        {copied ? "✅" : "📋"}
-                     </button>
-                 )}
-                 <span className="text-gray-500 text-[10px]">{isJsonViewOpen ? '▼' : '▶'}</span>
+                <span className="text-[10px] font-bold text-pink-300 uppercase">Target Spec</span>
+                {/* 🟢 GREEN STATUS DOT */}
+                {isReady && (
+                    <span className="flex h-1.5 w-1.5 relative">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
+                    </span>
+                )}
             </div>
+            <span className="text-pink-500 text-[10px]">{isPromptOpen ? '▼' : '▶'}</span>
         </div>
         
-        {isJsonViewOpen && (
-            <div className="max-h-[150px] overflow-y-auto custom-scrollbar p-2 bg-black/20">
+        {isPromptOpen && (
+            <div>
                  {node.data.transformationJson ? (
-                    <pre className="text-[10px] text-pink-100 font-mono whitespace-pre-wrap leading-relaxed">
-                        {JSON.stringify(node.data.transformationJson, null, 2)}
-                    </pre>
+                    <CinematicInspector 
+                        data={node.data.transformationJson as CinematicJSON} 
+                        className="border-none rounded-none bg-transparent"
+                    />
                  ) : (
-                    <div className="text-center text-[10px] text-gray-500 py-4 italic">
-                        {node.data.isProcessing ? 'Generating Spec...' : 'No JSON generated yet.'}
+                    <div className="text-center text-[10px] text-gray-600 py-4 italic">
+                        {node.data.isProcessing ? 'Architecting new scene...' : 'Waiting for prompt...'}
                     </div>
                  )}
             </div>

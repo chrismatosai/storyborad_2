@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { CinematicPrompt, SceneEntity, CompositionElement, CinematicJSON, CharacterPassport, SettingPassport } from "../types/cinematicSchema";
 import { CharacterData, SettingData } from "../types/graph";
@@ -28,7 +27,7 @@ interface EntityDetail {
 
 interface SceneEntity {
   id: string;
-  type: string;
+  type: string; // "character"
   description: string;
   placement_plane: string; // e.g. foreground, midground, background
   details: EntityDetail;
@@ -431,6 +430,53 @@ export const fetchCinematicSpec = async (
         return safeJsonParse<CinematicJSON>(response.text, {} as CinematicJSON);
     } catch (e) {
          console.error("Cinematic Spec generation failed", e);
+         return null;
+    }
+};
+
+/**
+ * Toma un JSON Cinemático existente y aplica modificaciones basadas en lenguaje natural.
+ * Mantiene la estructura estricta pero actualiza los valores solicitados.
+ */
+export const transformCinematicSpec = async (
+  sourceJson: CinematicJSON, 
+  modificationPrompt: string
+): Promise<CinematicJSON | null> => {
+    if (!process.env.API_KEY) return null;
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+    const prompt = `
+    ROLE: Expert Technical Director and JSON Editor.
+    TASK: You will receive a SOURCE JSON representing a scene and a MODIFICATION PROMPT.
+    
+    GOAL: Update the SOURCE JSON to reflect the requested changes while preserving strict schema validity and keeping unchanged elements intact.
+    
+    SOURCE JSON:
+    ${JSON.stringify(sourceJson)}
+    
+    MODIFICATION PROMPT:
+    "${modificationPrompt}"
+    
+    INSTRUCTIONS:
+    1. Analyze the Modification Prompt to identify what needs to change (e.g., Lighting, Mood, Camera Angle, Character Action).
+    2. Apply these changes to the relevant fields in the JSON.
+    3. KEEP ALL OTHER FIELDS UNCHANGED unless they contradict the modification.
+    4. Ensure the output is a VALID JSON object matching the CinematicPrompt schema exactly.
+    
+    OUTPUT FORMAT: JSON ONLY (No markdown).
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: { parts: [{ text: prompt }] },
+            config: { responseMimeType: 'application/json' }
+        });
+        
+        // Usamos la misma utilidad segura de parseo
+        return safeJsonParse<CinematicJSON>(response.text, sourceJson); // Fallback al original si falla
+    } catch (e) {
+         console.error("Cinematic Transformation failed", e);
          return null;
     }
 };

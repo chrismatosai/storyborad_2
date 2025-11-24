@@ -125,14 +125,26 @@ export const useConnectionEnricher = (
       }
 
       // 2. Image -> Transformation Sync (Flow: Left to Right)
-      // Grabs generated image from Source Image Node and stores it as reference in Transformation Node
+      // Grabs generated image AND THE JSON SPEC from Source Image Node
       if (targetNode.type === NodeType.Transformation && sourceNode.type === NodeType.Image) {
           const sourceData = sourceNode.data as ImageData;
           const targetData = targetNode.data as TransformationData;
 
-          // Only update if source has image and it's different from target's reference
-          if (sourceData.image && targetData.referenceImage !== sourceData.image) {
-              updateNodeData(targetNode.id, { referenceImage: sourceData.image });
+          // Only update if we have new data to propagate
+          // Check image OR json difference
+          const sourceJsonStr = JSON.stringify(sourceData.enrichedSceneJson);
+          const targetJsonStr = JSON.stringify(targetData.sourceJson);
+
+          if (
+              (sourceData.image && targetData.referenceImage !== sourceData.image) ||
+              (sourceData.enrichedSceneJson && sourceJsonStr !== targetJsonStr)
+          ) {
+              // ⚡ PROPAGACIÓN DE DATOS CRÍTICA
+              updateNodeData(targetNode.id, { 
+                  referenceImage: sourceData.image,
+                  sourceJson: sourceData.enrichedSceneJson as any // <--- Aquí pasamos el JSON Estructural
+              });
+              console.log("🔄 [Enricher] Propagated Image + JSON to Transformation Node");
           }
       }
 

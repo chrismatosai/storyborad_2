@@ -45,7 +45,9 @@ export const ImageNode = React.memo(({ node, onGenerate, updateNodeData, connect
 
   const isTransformationMode = node.data.mode === 'transformation' && node.data.incomingTransformationData;
   const hasReferenceImage = node.data.incomingTransformationData?.referenceImage;
-  const isSceneReady = node.data.sceneEnrichmentStatus === 'success';
+  
+  // Estado "Listo": Ya sea enriquecimiento exitoso O datos de transformación válidos
+  const isSceneReady = node.data.sceneEnrichmentStatus === 'success' || (isTransformationMode && !!node.data.incomingTransformationData?.json);
 
   return (
     <div className="p-3 space-y-2 relative min-w-[280px]">
@@ -159,7 +161,7 @@ export const ImageNode = React.memo(({ node, onGenerate, updateNodeData, connect
              </span>
              
              {/* 🟢 GREEN STATUS INDICATOR */}
-             {(isSceneReady || (isTransformationMode && hasReferenceImage)) && (
+             {isSceneReady && (
                  <span className="flex h-2 w-2 relative ml-auto mr-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
@@ -170,7 +172,8 @@ export const ImageNode = React.memo(({ node, onGenerate, updateNodeData, connect
 
       {isPromptOpen && (
         <div className="relative bg-gray-950 rounded-md border border-gray-700 overflow-hidden">
-          {(!node.data.enrichedSceneJson && (node.data.prompt || isTransformationMode)) && (
+          {/* Copy Button Logic */}
+          {(!node.data.enrichedSceneJson && !isTransformationMode) && (
               <div className="absolute top-2 right-2 z-10">
                 <button onClick={handleCopyJson} className="p-1.5 bg-gray-800 text-gray-300 rounded hover:text-white text-xs">
                     {isCopied ? "✅" : "📋"}
@@ -179,20 +182,22 @@ export const ImageNode = React.memo(({ node, onGenerate, updateNodeData, connect
           )}
 
           {(() => {
+            // MODO TRANSFORMACIÓN: Renderizado Rico
             if (isTransformationMode && node.data.incomingTransformationData) {
-                 const { json, referenceImage } = node.data.incomingTransformationData;
-                 return (
-                    <div className="bg-pink-950/10">
-                        <div className="px-3 py-2 bg-pink-900/20 border-b border-pink-700/30 flex items-center justify-between">
-                             <span className="text-[10px] font-bold text-pink-300 uppercase">Transformation Mode</span>
-                             {referenceImage && <span className="text-[9px] bg-green-900/50 text-green-400 px-1 rounded border border-green-500/30">Linked</span>}
+                 const { json } = node.data.incomingTransformationData;
+                 if (json) {
+                     // AQUÍ ESTÁ EL CAMBIO: Usar CinematicInspector en lugar de <pre>
+                     return (
+                        <div className="bg-pink-950/10 border-l-2 border-pink-500">
+                            <CinematicInspector 
+                                data={json as CinematicJSON}
+                                className="border-none rounded-none bg-transparent"
+                            />
                         </div>
-                        <pre className="p-3 text-[10px] text-pink-200 font-mono overflow-auto max-h-[200px] custom-scrollbar">
-                            {json ? JSON.stringify(json, null, 2) : "Waiting for params..."}
-                        </pre>
-                    </div>
-                 );
+                     );
+                 }
             }
+            // MODO STANDARD
             if (node.data.sceneEnrichmentStatus === 'loading') {
                 return <div className="p-4 text-yellow-500/80 text-xs font-mono text-center animate-pulse">Generating Scene Spec...</div>;
             }

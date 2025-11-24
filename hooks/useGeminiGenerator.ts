@@ -152,10 +152,15 @@ export const useGeminiGenerator = (
               
               let transformationJson = transformNode.data.transformationJson;
               if (!transformationJson) {
-                  transformationJson = await enrichSceneDescription(modificationPrompt);
-                  updateNodeData(transformNode.id, { transformationJson }); 
+                  // Fallback: Generate V2 spec if not already processed by node
+                  transformationJson = await fetchCinematicSpec(modificationPrompt, null, null);
+                  if (transformationJson) {
+                      updateNodeData(transformNode.id, { transformationJson }); 
+                  }
               }
               
+              if (!transformationJson) throw new Error("Failed to generate transformation spec.");
+
               currentTrace.architectOutput = transformationJson;
               promptString = JSON.stringify(transformationJson, null, 2);
 
