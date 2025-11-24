@@ -1,4 +1,3 @@
-
 import { NodeType } from '../../types/graph';
 
 export interface NodeConfigItem {
@@ -49,7 +48,7 @@ export const NODE_CONFIG: Record<NodeType, NodeConfigItem> = {
     title: 'Video Prompter',
     width: 340,
     inputs: ['Start Frame', 'End Frame'],
-    outputs: ['Video URL'],
+    outputs: [],
     color: 'bg-indigo-900',
   },
 };

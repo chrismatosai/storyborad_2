@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Node, TransformationData } from '../../types/graph';
 import { enrichSceneDescription } from '../../services/promptArchitect';
@@ -9,10 +8,20 @@ interface TransformationNodeProps {
 }
 
 export const TransformationNode = React.memo(({ node, updateNodeData }: TransformationNodeProps) => {
-  const [isJsonViewOpen, setIsJsonViewOpen] = useState(false);
+  const [isJsonViewOpen, setIsJsonViewOpen] = useState(true); // Default open to show specs
+  const [copied, setCopied] = useState(false);
 
   const handlePromptChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     updateNodeData(node.id, { modificationPrompt: e.target.value });
+  };
+
+  const handleCopy = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (node.data.transformationJson) {
+          navigator.clipboard.writeText(JSON.stringify(node.data.transformationJson, null, 2));
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+      }
   };
 
   const processTransformation = async () => {
@@ -20,9 +29,7 @@ export const TransformationNode = React.memo(({ node, updateNodeData }: Transfor
 
     updateNodeData(node.id, { isProcessing: true });
     try {
-      // Reuse scene enricher to convert modification request into structured JSON
       const resultJson = await enrichSceneDescription(node.data.modificationPrompt);
-      
       updateNodeData(node.id, { 
         isProcessing: false, 
         transformationJson: resultJson 
@@ -60,47 +67,51 @@ export const TransformationNode = React.memo(({ node, updateNodeData }: Transfor
         <label className="block text-xs font-bold text-gray-400 mb-1">Transformation Prompt</label>
         <textarea
           className="w-full p-2 bg-gray-700 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-pink-500 text-sm"
-          placeholder="e.g., Change time of day to sunset, make the character smile..."
+          placeholder="e.g., Change time of day to sunset..."
           value={node.data.modificationPrompt || ''}
           onChange={handlePromptChange}
-          onBlur={processTransformation} // Trigger processing on blur
+          onBlur={processTransformation}
           rows={3}
         />
       </div>
 
-      {/* Status & JSON Output */}
-      <div className="bg-gray-900/50 rounded border border-gray-700 overflow-hidden">
+      {/* Unified JSON Inspector Style */}
+      <div className="bg-gray-900 rounded-md border border-pink-900/50 overflow-hidden shadow-inner">
         <div 
             onClick={() => setIsJsonViewOpen(!isJsonViewOpen)}
-            className="px-2 py-1 bg-gray-800/50 flex justify-between items-center cursor-pointer hover:bg-gray-800 transition-colors"
+            className="flex justify-between items-center p-2 bg-pink-900/20 border-b border-pink-700/30 cursor-pointer hover:bg-pink-900/30 transition-colors"
         >
-            <span className="text-[10px] font-bold text-gray-400 uppercase">Spec JSON</span>
-             {node.data.isProcessing ? (
-                <svg className="animate-spin h-3 w-3 text-pink-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-            ) : (
-                 <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className={`h-3 w-3 text-gray-400 transition-transform duration-200 ${isJsonViewOpen ? 'rotate-180' : ''}`}
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                >
-                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
-            )}
+            <span className="text-[10px] uppercase tracking-wider font-bold text-pink-400">Spec JSON</span>
+            <div className="flex items-center gap-2">
+                 {/* Processing Spinner */}
+                 {node.data.isProcessing && (
+                    <svg className="animate-spin h-3 w-3 text-pink-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                 )}
+                 {/* Copy Button */}
+                 {node.data.transformationJson && (
+                     <button 
+                        onClick={handleCopy}
+                        className="text-[10px] bg-black/40 hover:bg-pink-500/20 text-pink-200 px-2 py-0.5 rounded transition-all"
+                     >
+                        {copied ? "✅" : "📋"}
+                     </button>
+                 )}
+                 <span className="text-gray-500 text-[10px]">{isJsonViewOpen ? '▼' : '▶'}</span>
+            </div>
         </div>
         
         {isJsonViewOpen && (
-            <div className="p-2 max-h-[150px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600">
+            <div className="max-h-[150px] overflow-y-auto custom-scrollbar p-2 bg-black/20">
                  {node.data.transformationJson ? (
-                    <pre className="text-[10px] text-pink-300 font-mono whitespace-pre-wrap">
+                    <pre className="text-[10px] text-pink-100 font-mono whitespace-pre-wrap leading-relaxed">
                         {JSON.stringify(node.data.transformationJson, null, 2)}
                     </pre>
                  ) : (
-                    <div className="text-center text-[10px] text-gray-500 py-2 italic">
-                        {node.data.isProcessing ? 'Generating JSON...' : 'No JSON generated yet.'}
+                    <div className="text-center text-[10px] text-gray-500 py-4 italic">
+                        {node.data.isProcessing ? 'Generating Spec...' : 'No JSON generated yet.'}
                     </div>
                  )}
             </div>

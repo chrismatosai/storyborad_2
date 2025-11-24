@@ -1,4 +1,3 @@
-
 import { CinematicPrompt, CharacterPassport, CinematicJSON, SettingPassport } from './cinematicSchema';
 import { VideoPrompt } from './videoSchema';
 
@@ -91,6 +90,7 @@ export interface VideoData extends NodeData {
   error?: string;
   startImage?: string;
   endImage?: string;
+  movementPrompt?: string;
 }
 
 export type AnyNodeData = CharacterData | SettingData | ScriptData | ImageData | TransformationData | VideoData;

@@ -294,20 +294,19 @@ export const fetchCharacterPassport = async (description: string): Promise<Chara
 export const buildScenePrompt = (
   scriptText: string, 
   characterProfile: CharacterPassport | null,
-  settingProfile: SettingPassport | null // 🆕 Recibimos el escenario elegido
+  settingProfile: SettingPassport | null 
 ): string => {
 
   // 1. LÓGICA DE OVERRIDE DE PERSONAJE
   const charSection = characterProfile 
     ? `
       [[🔴 CRITICAL INSTRUCTION: CHARACTER VISUAL LOCK]]
-      IGNORE any physical description of the character found in the "INPUT SCRIPT".
-      You MUST use the visual data from this JSON profile exactly.
+      You MUST use the provided Character Profile.
+      - ID: "${characterProfile.character_id}"
+      - DESCRIPTION: "${characterProfile.description}"
       
-      MANDATORY CHARACTER TRAITS:
+      MANDATORY VISUAL TRAITS (Copy strictly to JSON):
       ${JSON.stringify(characterProfile.facialCompositeProfile)}
-      
-      Example of override: If script says "young blonde girl" but MANDATORY TRAITS say "old bald man", YOU MUST DRAW THE OLD BALD MAN.
       `
     : "";
 
@@ -315,7 +314,6 @@ export const buildScenePrompt = (
   const settingSection = settingProfile
     ? `
       [[🟢 CRITICAL INSTRUCTION: SETTING VISUAL LOCK]]
-      IGNORE any location description found in the "INPUT SCRIPT".
       The scene MUST take place in this exact environment.
       
       MANDATORY SETTING STYLE:
@@ -328,42 +326,50 @@ export const buildScenePrompt = (
   return `
     ROLE: Technical Director enforcing strict continuity.
     
-    INPUT SCRIPT: "${scriptText}"
+    INPUT CONTEXT:
+    - SCRIPT ACTION: "${scriptText}"
+    ${characterProfile ? `- CHARACTER REF: Included` : '- CHARACTER REF: None'}
+    ${settingProfile ? `- SETTING REF: Included` : '- SETTING REF: None'}
 
     ${charSection}
     ${settingSection}
 
-    TASK: Generate the Scene JSON based on the INPUT SCRIPT actions, but STRICTLY enforcing the visual constraints above.
+    TASK: Generate the Scene JSON based on the INPUT SCRIPT ACTION.
+    
+    DATA MAPPING RULES (STRICT):
+    1. scene_globals.description -> MUST correspond to "SCRIPT ACTION".
+    2. character[0].description -> MUST be exactly "${characterProfile ? characterProfile.description : "Inferred from script"}" (Do not hallucinate a new description).
+    3. character[0].facialCompositeProfile -> MUST be the "MANDATORY VISUAL TRAITS" JSON provided above.
     
     OUTPUT FORMAT: JSON ONLY (No markdown).
     
     TARGET JSON SCHEMA (Strict):
     {
       "scene_globals": {
-        "description": "A concise, cinematic one-sentence description of the entire scene",
+        "description": "The cinematic scene description based on SCRIPT ACTION",
         "mood": ["Mood1", "Mood2"],
         "lighting_globals": {
-          "type": "Primary lighting type (e.g. Chiaroscuro)",
-          "quality": ["High contrast", "Soft", "Volumetric"],
+          "type": "Primary lighting type",
+          "quality": ["High contrast", "Soft"],
           "color_temperature": "e.g. Cool cyan vs Warm orange"
         }
       },
       "composition": {
-        "background": { "description": "Distant elements description" },
-        "midground": { "description": "Mid-plane elements", "focus_target_id": "character_id_if_here" },
-        "foreground": { "description": "Closest elements to camera" },
+        "background": { "description": "Distant elements" },
+        "midground": { "description": "Mid-plane elements" },
+        "foreground": { "description": "Closest elements" },
         "frame_element": {
-          "description": "Optional framing object (or null)",
-          "position": "e.g. Overlay",
+          "description": "Optional framing object",
+          "position": "Overlay",
           "focus_state": "Blurred",
           "texture": "Texture details"
         }
       },
       "character": [
         {
-          "id": "main_subject_id",
+          "id": "${characterProfile ? characterProfile.character_id : "main_subject"}",
           "type": "person",
-          "description": "Brief summary",
+          "description": "The character description text",
           "placement_plane": "foreground OR midground",
           "facialCompositeProfile": {
             "faceShape": "String",
@@ -375,30 +381,29 @@ export const buildScenePrompt = (
             "mouth": { "shape": "String", "expression": "String" }
           },
           "details": {
-            "pose": "Action/Pose based on script",
+            "pose": "Action/Pose based on SCRIPT ACTION",
             "facial_expression": {
               "emotion": "Inferred emotion",
               "description": "Micro-expressions"
             },
             "clothing": {
-              "items": "Detailed clothing description",
-              "texture": "Fabric details (wet, dirty, silk, etc)"
+              "items": "Clothing description",
+              "texture": "Fabric details"
             },
             "skin_texture": {
               "details": "Pores, sweat, makeup",
-              "imperfections": "Scars, moles, dirt"
+              "imperfections": "Scars, moles"
             }
           }
         }
       ],
       "presentation": {
         "style": ["Photorealistic", "Cinematic", "8k"],
-        "materials": { "film_grain": "ISO value or style" },
+        "materials": { "film_grain": "ISO value" },
         "camera": {
           "lens_focal_length": "e.g. 35mm, 85mm",
           "aperture": "e.g. f/1.8",
           "depth_of_field": "Shallow/Deep",
-          "focus_target_id": "main_subject_id",
           "shot_type": "Wide / Medium / Close-up",
           "angle": "Low / High / Eye-level",
           "aspect_ratio": "16:9"

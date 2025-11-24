@@ -1,8 +1,8 @@
-
 import { GoogleGenAI, Modality } from "@google/genai";
 import type { Part } from "@google/genai";
 import { safeJsonParse } from "../utils/jsonRepair";
 import { CharacterPassport, SettingPassport } from "../types/cinematicSchema";
+import { VideoPrompt } from "../types/videoSchema";
 
 export interface GenerationPayload {
   prompt: string;
@@ -182,4 +182,114 @@ export const analyzeSettingImage = async (base64Image: string): Promise<SettingP
     console.error("Setting analysis failed:", error);
     return null;
   }
+};
+
+/**
+ * Generates a VEO-compatible JSON prompt based on start/end frames and user description.
+ */
+export const generateVeoPrompt = async (
+  startImage: string | undefined, 
+  endImage: string | undefined, 
+  movementText: string
+): Promise<VideoPrompt | null> => {
+    if (!process.env.API_KEY) return null;
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+    // Validación básica
+    if (!startImage && !endImage) throw new Error("At least one image is required.");
+
+    const parts: Part[] = [];
+    
+    // Instrucción Maestra
+    parts.push({ text: `
+    ROLE: Expert AI Video Director using Google VEO.
+    TASK: Create a precise JSON specification for a video shot based on the provided assets and movement description.
+    
+    INPUTS:
+    - Movement/Action Goal: "${movementText}"
+    - Start Frame: Provided (if any)
+    - End Frame: Provided (if any)
+
+    OUTPUT FORMAT: JSON ONLY (Strictly following the schema below).
+    
+    REQUIREMENTS:
+    1. Analyze the images to infer the "actors", "scene", "style", and "camera" details.
+    2. Fill in the "sequence" array to describe how the video transitions from Start to End using the requested Movement.
+    3. Do NOT halluncinate assets not present, but describe those present in great detail.
+
+    TARGET JSON SCHEMA:
+    {
+        "metadata": {
+            "project_name": "AI Storyboard Shot",
+            "version": "1.0",
+            "request_id": "GEN-VEO-001",
+            "model_target": "veo-3.1-generate-preview"
+        },
+        "output_specifications": {
+            "duration_seconds": 8.0,
+            "resolution": "1080p",
+            "aspect_ratio": "16:9",
+            "fps": 24
+        },
+        "timeline": {
+            "interpolation_mode": "semantic_aware",
+            "keyframes": []
+        },
+        "actors": [
+            {
+            "actor_id": "main_actor",
+            "description": "Detailed visual description inferred from images...",
+            "facialCompositeProfile": {
+                "faceShape": "String",
+                "skinTone": "String",
+                "eyes": { "color": "String" }
+            }
+            }
+        ],
+        "scene": {
+            "location": "Inferred location...",
+            "time_of_day": "Inferred...",
+            "weather": "Inferred..."
+        },
+        "scene_description": "A concise prompt describing the full 8s shot...",
+        "style": {
+            "visual_style": "Cinematic, Photorealistic...",
+            "lighting": { "type": "String" }
+        },
+        "camera": {
+            "composition": "e.g. Medium Shot",
+            "camera_movements": ["Inferred movement e.g. Pan Right"]
+        },
+        "sequence": [
+            {
+            "start_time": "0.0s",
+            "end_time": "8.0s",
+            "description": "Detailed narrative of the action...",
+            "actions": ["Action 1", "Action 2"]
+            }
+        ],
+        "audio_scape": {
+            "ambient_sound": ["Inferred..."],
+            "sound_effects": []
+        },
+        "negative_prompts": ["text", "watermark", "distortion"]
+    }
+    `});
+
+    // Adjuntar imágenes si existen
+    if (startImage) parts.push(fileToPart(startImage, 'image/png'));
+    if (endImage) parts.push(fileToPart(endImage, 'image/png'));
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash', // Usamos el modelo multimodal estándar para analizar y escribir JSON
+            contents: { parts },
+            config: { responseMimeType: 'application/json' }
+        });
+        
+        return safeJsonParse<VideoPrompt>(response.text, {} as VideoPrompt);
+    } catch (e) {
+        console.error("VEO Prompt generation failed:", e);
+        throw e;
+    }
 };
