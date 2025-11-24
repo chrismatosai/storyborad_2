@@ -45,4 +45,11 @@ export const NODE_CONFIG: Record<NodeType, NodeConfigItem> = {
     outputs: ['To Image'],
     color: 'bg-pink-800',
   },
+  [NodeType.Video]: {
+    title: 'Video Prompter',
+    width: 340,
+    inputs: ['Start Frame', 'End Frame'],
+    outputs: ['Video URL'],
+    color: 'bg-indigo-900',
+  },
 };

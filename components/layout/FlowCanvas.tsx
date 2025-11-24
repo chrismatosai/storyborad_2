@@ -1,5 +1,6 @@
+
 import React, { useLayoutEffect, useState, useRef } from 'react';
-import { Node, Connection, NodeType, ScriptData, CharacterData, SettingData, ImageData, TransformationData, ConnectorPosition } from '../../types/graph';
+import { Node, Connection, NodeType, ScriptData, CharacterData, SettingData, ImageData, TransformationData, VideoData, ConnectorPosition } from '../../types/graph';
 import { NODE_CONFIG } from '../nodes/nodeConfig';
 import { BaseNode } from '../nodes/BaseNode';
 import { CharacterNode } from '../nodes/CharacterNode';
@@ -7,6 +8,7 @@ import { SettingNode } from '../nodes/SettingNode';
 import { ScriptNode } from '../nodes/ScriptNode';
 import { ImageNode } from '../nodes/ImageNode';
 import { TransformationNode } from '../nodes/TransformationNode';
+import { VideoNode } from '../nodes/VideoNode';
 
 interface FlowCanvasProps {
   nodes: Node[];
@@ -22,7 +24,7 @@ interface FlowCanvasProps {
   // Specific Actions
   addScene: (nodeId: string) => void;
   deleteScene: (nodeId: string, sceneId: string) => void;
-  generateImage: (node: Node<ImageData>) => void;
+  generateImage: (node: Node<any>) => void;
   // Connecting State
   connecting: { fromNodeId: string; fromOutput: string | number; toPosition: { x: number; y: number } } | null;
   connectingToPos: { x: number; y: number };
@@ -189,6 +191,15 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({
             )}
             {node.type === NodeType.Transformation && (
               <TransformationNode node={node as Node<TransformationData>} updateNodeData={updateNodeData} />
+            )}
+            {node.type === NodeType.Video && (
+               <VideoNode
+                 node={node as Node<VideoData>}
+                 updateNodeData={updateNodeData}
+                 onGenerate={generateImage}
+                 connectorRefs={connectorRefs}
+                 onConnectorMouseDown={onConnectorMouseDown}
+               />
             )}
           </BaseNode>
         );

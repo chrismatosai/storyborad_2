@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useRef, MouseEvent, useEffect } from 'react';
 import { NodeType } from './types/graph';
 import { useViewport } from './hooks/useViewport';
@@ -21,6 +22,10 @@ export default function App() {
       actions 
   } = useGraphEditor();
   
+  // AGREGA ESTO PARA DEPURAR:
+  console.log("🔍 DEBUG - NodeTypes disponibles:", Object.keys(NodeType));
+  console.log("🔍 DEBUG - Configuración de Video:", NODE_CONFIG[NodeType.Video]);
+
   const [connecting, setConnecting] = useState<{ fromNodeId: string; fromOutput: string | number; toPosition: { x: number; y: number } } | null>(null);
   
   // Persistence Integration

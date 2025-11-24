@@ -7,13 +7,27 @@ export const useGraphEditor = () => {
   const [connections, setConnections] = useState<Connection[]>([]);
 
   const addNode = useCallback((type: NodeType, position = { x: 100, y: 100 }) => {
+    let initialData: AnyNodeData;
+
+    switch (type) {
+        case NodeType.Script:
+            initialData = { script: '', scenes: [] };
+            break;
+        case NodeType.Image:
+            initialData = { prompt: '', isLoading: false };
+            break;
+        case NodeType.Video:
+             initialData = { isLoading: false, startImage: undefined, endImage: undefined, videoUrl: undefined };
+             break;
+        default:
+             initialData = { prompt: '', image: undefined };
+    }
+
     const newNode: Node = {
       id: crypto.randomUUID(),
       type,
       position,
-      data: type === NodeType.Script ? { script: '', scenes: [] } :
-            type === NodeType.Image ? { prompt: '', isLoading: false } :
-            { prompt: '', image: undefined },
+      data: initialData,
     };
     setNodes(prev => [...prev, newNode]);
   }, []);

@@ -1,7 +1,6 @@
 
 import React, { useState } from 'react';
 import { Node, SettingData } from '../../types/graph';
-import { fileToBase64 } from '../../utils/file';
 import { analyzeSettingImage } from '../../services/geminiService';
 import { CinematicInspector } from '../ui/CinematicInspector';
 

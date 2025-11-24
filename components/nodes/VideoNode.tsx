@@ -2,7 +2,6 @@
 import React, { useState, memo } from 'react';
 import { Node, VideoData } from '../../types/graph';
 import { Handle } from './Handle';
-import { VideoPrompt } from '../../types/videoSchema';
 
 interface VideoNodeProps { 
     node: Node<VideoData>; 

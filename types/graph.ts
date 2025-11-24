@@ -1,5 +1,6 @@
 
 import { CinematicPrompt, CharacterPassport, CinematicJSON, SettingPassport } from './cinematicSchema';
+import { VideoPrompt } from './videoSchema';
 
 export enum NodeType {
   Character = 'CHARACTER',
@@ -7,6 +8,7 @@ export enum NodeType {
   Script = 'SCRIPT',
   Image = 'IMAGE',
   Transformation = 'TRANSFORMATION',
+  Video = 'VIDEO',
 }
 
 export interface NodeData {}
@@ -82,7 +84,16 @@ export interface TransformationData extends NodeData {
   referenceImage?: string; // base64 from connected Image Node
 }
 
-export type AnyNodeData = CharacterData | SettingData | ScriptData | ImageData | TransformationData;
+export interface VideoData extends NodeData {
+  promptSchema?: VideoPrompt | null;
+  videoUrl?: string;
+  isLoading: boolean;
+  error?: string;
+  startImage?: string;
+  endImage?: string;
+}
+
+export type AnyNodeData = CharacterData | SettingData | ScriptData | ImageData | TransformationData | VideoData;
 
 export interface Node<T extends AnyNodeData = AnyNodeData> {
   id: string;
