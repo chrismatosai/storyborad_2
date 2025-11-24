@@ -64,9 +64,18 @@ export const useGraphEditor = () => {
   const addConnection = useCallback((conn: Omit<Connection, 'id'>) => {
     if (conn.fromNodeId === conn.toNodeId) return;
     setConnections(prev => {
-        if (prev.some(c => c.toNodeId === conn.toNodeId && c.toInputIndex === conn.toInputIndex)) {
-            return prev;
-        }
+        // Eliminamos la restricción de unicidad por input.
+        // Ahora se permiten múltiples cables al mismo puerto (ideal para Settings).
+        
+        // Opcional: Evitar duplicados exactos (mismo origen -> mismo destino)
+        const exists = prev.some(c => 
+            c.fromNodeId === conn.fromNodeId && 
+            c.toNodeId === conn.toNodeId &&
+            c.toInputIndex === conn.toInputIndex &&
+            c.fromOutput === conn.fromOutput
+        );
+        if (exists) return prev;
+
         return [...prev, { ...conn, id: crypto.randomUUID() }];
     });
   }, []);

@@ -1,10 +1,10 @@
-
-import React, { MouseEvent, MutableRefObject, useRef } from 'react';
+import React, { MouseEvent, MutableRefObject, useRef, useState } from 'react';
 import { Node, ScriptData, ScriptScene, CharacterData, SettingData } from '../../types/graph';
 import { Handle } from './Handle';
-import { BaseNode } from './BaseNode'; // Keeping import for reference but utilizing content logic
+// Importamos el parser desde la carpeta utils en la raíz (subimos 2 niveles)
+import { parseScriptCSV } from '../../utils/scriptParser'; 
 
-// --- SUBCOMPONENT: Setting Selector ---
+// --- SUBCOMPONENT: Setting Selector (Checkboxes) ---
 const SettingSelector = ({ connectedSettings, selectedId, onSelect }: { 
     connectedSettings: Node<SettingData>[], 
     selectedId: string | undefined, 
@@ -13,29 +13,34 @@ const SettingSelector = ({ connectedSettings, selectedId, onSelect }: {
   if (!connectedSettings || connectedSettings.length === 0) return null;
 
   return (
-    <div className="flex gap-1 ml-2">
+    <div className="flex flex-wrap gap-2 ml-2 mt-1">
       {connectedSettings.map((setting, index) => {
         const isSelected = selectedId === setting.id;
         return (
-          <button
+          <label 
             key={setting.id}
-            onMouseDown={(e) => e.stopPropagation()} 
-            onClick={(e) => {
-               e.stopPropagation();
-               // Toggle selection
-               onSelect(isSelected ? undefined : setting.id);
-            }}
-            title={`Use Setting ${index + 1}: ${setting.data.prompt?.substring(0, 20) || 'Untitled'}...`}
             className={`
-              w-5 h-5 rounded text-[9px] font-bold flex items-center justify-center border transition-all
+              flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] cursor-pointer transition-all select-none
               ${isSelected 
-                ? 'bg-green-600 border-green-300 text-white shadow-sm shadow-green-500/50 scale-105' 
-                : 'bg-gray-800 border-gray-600 text-gray-400 hover:border-green-500 hover:text-green-500'
+                ? 'bg-green-900/50 border-green-500 text-green-200' 
+                : 'bg-gray-800 border-gray-600 text-gray-500 hover:border-gray-500'
               }
             `}
+            onClick={(e) => e.stopPropagation()}
           >
-            {index + 1}
-          </button>
+            <input 
+                type="checkbox" 
+                checked={isSelected}
+                onChange={() => onSelect(isSelected ? undefined : setting.id)}
+                className="hidden"
+            />
+            <span className={isSelected ? 'text-green-400' : 'text-gray-600'}>
+                {isSelected ? '☑' : '☐'}
+            </span>
+            <span className="max-w-[60px] truncate">
+                Setting {index + 1}
+            </span>
+          </label>
         );
       })}
     </div>
@@ -69,26 +74,29 @@ const SceneModule: React.FC<SceneModuleProps> = ({
 }) => {
   
   return (
-    <div className="bg-gray-700/60 rounded-lg border border-gray-600/50 relative group/scene mb-2">
-      <div className="flex justify-between items-center p-2 relative">
-        <div className="flex items-center gap-2 flex-grow min-w-0">
-          <span className="font-bold text-[10px] text-purple-400 uppercase tracking-wide">
-             Scene {index + 1}
-          </span>
-          <div 
-            onClick={() => toggleSceneExpanded(scene.id)}
-            className="cursor-pointer text-gray-400 hover:text-white"
-          >
-             {scene.isExpanded ? '▼' : '▶'}
-          </div>
+    <div className="bg-gray-700/60 rounded-lg border border-gray-600/50 relative group/scene mb-2 visible">
+      {/* Scene Header */}
+      <div className="flex justify-between items-start p-2 relative bg-gray-800/50">
+        <div className="flex flex-col gap-1 flex-grow min-w-0">
+            <div className="flex items-center gap-2">
+                <span className="font-bold text-[10px] text-purple-400 uppercase tracking-wide">
+                    Scene {index + 1}
+                </span>
+                <div 
+                    onClick={() => toggleSceneExpanded(scene.id)}
+                    className="cursor-pointer text-gray-400 hover:text-white text-[10px]"
+                >
+                    {scene.isExpanded ? '▼' : '▶'}
+                </div>
+            </div>
+            
+            {/* SETTING SELECTOR (Checkboxes) */}
+            <SettingSelector 
+                connectedSettings={connectedSettings}
+                selectedId={scene.selectedSettingId}
+                onSelect={(id) => updateSceneSetting(scene.id, id)}
+            />
         </div>
-        
-        {/* SETTING SELECTOR */}
-        <SettingSelector 
-            connectedSettings={connectedSettings}
-            selectedId={scene.selectedSettingId}
-            onSelect={(id) => updateSceneSetting(scene.id, id)}
-        />
 
         <div className="flex items-center gap-1 ml-2">
             <button
@@ -100,19 +108,14 @@ const SceneModule: React.FC<SceneModuleProps> = ({
                 className="p-1 rounded-full hover:bg-red-800/50 text-gray-400 hover:text-white transition-colors opacity-0 group-hover/scene:opacity-100"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                    />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
             </button>
         </div>
 
-        {/* Handle */}
+        {/* Output Handle */}
         <div
-          style={{ right: '-12px' }}
-          className="absolute top-1/2 transform translate-x-1/2 -translate-y-1/2 z-10 group"
+          className="absolute top-1/2 right-0 transform translate-x-1/2 -translate-y-1/2 z-50 group"
         >
           <span className="absolute right-full top-1/2 -translate-y-1/2 mr-2 text-xs text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap bg-black/50 px-1 rounded">
             {scene.title}
@@ -169,27 +172,23 @@ export const ScriptNode = React.memo(({
   onDisconnectInput
 }: ScriptNodeProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pasteText, setPasteText] = useState("");
+  const [showPaste, setShowPaste] = useState(false);
 
   // Filtering connected nodes based on type
   const connectedCharacter = connectedNodes.find(n => n.type === 'CHARACTER') as Node<CharacterData> | undefined;
   const connectedSettings = connectedNodes.filter(n => n.type === 'SETTING') as Node<SettingData>[];
 
-  const parseScript = (text: string) => {
-    // Logic: Split by empty lines (paragraphs) or "Scene X" headers if needed.
-    // Using double newline as separator for scenes.
-    const chunks = text.split(/\n\s*\n/); 
-    
-    const newScenes: ScriptScene[] = chunks
-      .filter(chunk => chunk.trim().length > 0)
-      .map((chunk, index) => ({
-        id: `scene-${node.id}-${Date.now()}-${index}`,
-        title: `Scene ${index + 1}`,
-        description: chunk.trim(),
-        isExpanded: true,
-        selectedSettingId: undefined // Reset setting on import
-      }));
-
-    updateNodeData(node.id, { scenes: newScenes });
+  const processCSV = (text: string) => {
+      // Usamos el parser que creamos en utils
+      const newScenes = parseScriptCSV(text, node.id);
+      if (newScenes.length > 0) {
+          updateNodeData(node.id, { scenes: newScenes });
+          setPasteText(""); 
+          setShowPaste(false);
+      } else {
+          alert("No valid scenes found. Check CSV format.");
+      }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -199,10 +198,9 @@ export const ScriptNode = React.memo(({
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target?.result as string;
-      parseScript(text);
+      processCSV(text);
     };
     reader.readAsText(file);
-    // Reset input
     if (e.target) e.target.value = '';
   };
 
@@ -220,7 +218,6 @@ export const ScriptNode = React.memo(({
     updateNodeData(node.id, { scenes: newScenes });
   };
 
-  // Update setting selection for a specific scene
   const updateSceneSetting = (sceneId: string, settingId: string | undefined) => {
     const newScenes = node.data.scenes.map((scene) =>
       scene.id === sceneId ? { ...scene, selectedSettingId: settingId } : scene
@@ -234,11 +231,7 @@ export const ScriptNode = React.memo(({
       <div className="space-y-2">
         <div className="flex flex-col gap-2 text-xs">
           {/* Character Input */}
-          <div
-            className={`relative flex-1 p-2 rounded border transition-colors ${
-              connectedCharacter ? 'border-blue-500/50 bg-blue-900/20' : 'border-gray-600 bg-gray-800/30'
-            }`}
-          >
+          <div className={`relative flex-1 p-2 rounded border transition-colors ${connectedCharacter ? 'border-blue-500/50 bg-blue-900/20' : 'border-gray-600 bg-gray-800/30'}`}>
              <Handle
                 type="input"
                 style={{ left: '-12px' }}
@@ -263,11 +256,7 @@ export const ScriptNode = React.memo(({
           </div>
 
           {/* Setting Input (Multi-capable) */}
-          <div
-            className={`relative flex-1 p-2 rounded border transition-colors ${
-              connectedSettings.length > 0 ? 'border-green-500/50 bg-green-900/20' : 'border-gray-600 bg-gray-800/30'
-            }`}
-          >
+          <div className={`relative flex-1 p-2 rounded border transition-colors ${connectedSettings.length > 0 ? 'border-green-500/50 bg-green-900/20' : 'border-gray-600 bg-gray-800/30'}`}>
              <Handle
                 type="input"
                 style={{ left: '-12px' }}
@@ -283,51 +272,58 @@ export const ScriptNode = React.memo(({
              />
 
             <div className="flex items-center gap-2 ml-2">
-                <span className="text-green-400 font-bold">Settings</span>
-                {connectedSettings.length > 0 ? (
-                    <div className="flex gap-1 flex-wrap">
-                        {connectedSettings.map((s, i) => (
-                            <span key={s.id} className="text-[9px] bg-green-800 text-white px-1.5 rounded border border-green-600" title={s.data.prompt}>
-                                {i + 1}
-                            </span>
-                        ))}
-                    </div>
-                ) : (
-                    <span className="text-gray-500 italic">None</span>
-                )}
+                <span className="text-green-400 font-bold">Settings ({connectedSettings.length})</span>
+                {connectedSettings.length === 0 && <span className="text-gray-500 italic">None</span>}
             </div>
           </div>
         </div>
       </div>
       
-      {/* IMPORT HEADER & STATS */}
-      <div className="flex justify-between items-center pb-2 border-b border-gray-700">
-            <div className="text-[10px] text-gray-400">
-               {node.data.scenes.length} Scenes | {connectedSettings.length} Settings
-            </div>
-            <button 
-               onClick={(e) => {
-                   e.stopPropagation();
-                   fileInputRef.current?.click();
-               }}
-               className="text-[10px] bg-purple-600 hover:bg-purple-500 text-white px-2 py-1 rounded flex gap-1 items-center transition-colors shadow-sm"
-            >
-               📂 Import Script
-            </button>
-            <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleFileUpload} 
-                className="hidden" 
-                accept=".txt,.csv,.md"
-            />
+      {/* IMPORT TOOLS */}
+      <div className="flex flex-col gap-2 border-b border-gray-700 pb-2">
+          <div className="flex justify-between items-center">
+                <span className="text-[10px] text-gray-400 uppercase font-bold">Script Tools</span>
+                <div className="flex gap-1">
+                    <button 
+                        onClick={() => setShowPaste(!showPaste)}
+                        className={`text-[10px] px-2 py-1 rounded flex gap-1 items-center transition-colors ${showPaste ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                    >
+                        📝 Paste CSV
+                    </button>
+                    <button 
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-[10px] bg-gray-700 hover:bg-gray-600 text-gray-300 px-2 py-1 rounded flex gap-1 items-center transition-colors"
+                    >
+                        📂 Upload CSV
+                    </button>
+                </div>
+                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".csv,.txt" />
+          </div>
+
+          {/* Paste Area */}
+          {showPaste && (
+              <div className="bg-black/30 p-2 rounded border border-purple-500/30 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <textarea 
+                    value={pasteText}
+                    onChange={(e) => setPasteText(e.target.value)}
+                    className="w-full h-24 bg-gray-900 text-xs text-gray-300 p-1 rounded border border-gray-700 focus:border-purple-500 mb-1 font-mono"
+                    placeholder={`Scene 1, A dark room...\nScene 2, Exterior day...`}
+                  />
+                  <button 
+                    onClick={() => processCSV(pasteText)}
+                    className="w-full bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold py-1 rounded"
+                  >
+                      Process CSV (Skip Header)
+                  </button>
+              </div>
+          )}
       </div>
 
       {/* SCENES LIST */}
-      <div className="space-y-1 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
+      <div className="space-y-1 max-h-[400px] overflow-y-auto custom-scrollbar pr-4 p-1 mt-2">
         {node.data.scenes.length === 0 ? (
             <div className="text-center py-6 text-gray-500 text-xs italic border border-dashed border-gray-700 rounded">
-                No scenes yet. <br/>Import a file or add manually.
+                No scenes yet. <br/>Paste CSV or Upload.
             </div>
         ) : (
             node.data.scenes.map((scene, index) => (
