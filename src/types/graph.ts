@@ -8,7 +8,7 @@ export enum NodeType {
   Script = 'SCRIPT',
   Image = 'IMAGE',
   Transformation = 'TRANSFORMATION',
-  Video = 'VIDEO'
+  Video = 'VIDEO',
 }
 
 export interface NodeData {}
