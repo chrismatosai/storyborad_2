@@ -33,15 +33,15 @@ export const NODE_CONFIG: Record<NodeType, NodeConfigItem> = {
   [NodeType.Image]: {
     title: 'Image Scene',
     width: 300,
-    inputs: ['prompt'],
+    inputs: ['Visual Ref', 'prompt'],
     outputs: [], // Custom rendered in component to ensure persistence
     color: 'bg-yellow-800',
   },
   [NodeType.Transformation]: {
     title: 'Transformation',
     width: 300,
-    inputs: ['Ref Image'],
-    outputs: ['To Image'],
+    inputs: ['Input Image'],
+    outputs: ['Image Output'],
     color: 'bg-pink-800',
   },
   [NodeType.Video]: {

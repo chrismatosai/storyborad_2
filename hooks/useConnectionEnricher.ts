@@ -125,59 +125,69 @@ export const useConnectionEnricher = (
       }
 
       // 2. Image -> Transformation Sync (Flow: Left to Right)
-      // Grabs generated image AND THE JSON SPEC from Source Image Node
       if (targetNode.type === NodeType.Transformation && sourceNode.type === NodeType.Image) {
           const sourceData = sourceNode.data as ImageData;
           const targetData = targetNode.data as TransformationData;
 
-          // Only update if we have new data to propagate
-          // Check image OR json difference
-          const sourceJsonStr = JSON.stringify(sourceData.enrichedSceneJson);
+          // [FIX] DETECT SOURCE TYPE:
+          // Si el nodo de imagen viene de una transformación previa, usamos "incomingTransformationData".
+          // Si viene de un script estándar, usamos "enrichedSceneJson".
+          const activeJson = sourceData.mode === 'transformation'
+              ? sourceData.incomingTransformationData?.json
+              : sourceData.enrichedSceneJson;
+
+          // Serializamos para comparar cambios
+          const sourceJsonStr = JSON.stringify(activeJson);
           const targetJsonStr = JSON.stringify(targetData.sourceJson);
 
-          if (
-              (sourceData.image && targetData.referenceImage !== sourceData.image) ||
-              (sourceData.enrichedSceneJson && sourceJsonStr !== targetJsonStr)
-          ) {
-              // ⚡ PROPAGACIÓN DE DATOS CRÍTICA
-              updateNodeData(targetNode.id, { 
-                  referenceImage: sourceData.image,
-                  sourceJson: sourceData.enrichedSceneJson as any // <--- Aquí pasamos el JSON Estructural
-              });
-              console.log("🔄 [Enricher] Propagated Image + JSON to Transformation Node");
+          // Si hay una imagen válida Y un JSON válido (de cualquiera de los dos orígenes)
+          if (sourceData.image && activeJson) {
+              if (
+                  targetData.referenceImage !== sourceData.image ||
+                  sourceJsonStr !== targetJsonStr
+              ) {
+                  console.log(`🔄 [Enricher] Propagating Data to Transformation: ${sourceData.mode === 'transformation' ? '(Chained)' : '(Standard)'}`);
+                  
+                  updateNodeData(targetNode.id, { 
+                      referenceImage: sourceData.image,
+                      sourceJson: activeJson as any // Pasamos el JSON activo, sea cual sea su origen
+                  });
+              }
           }
       }
 
-      // 3. Transformation -> Image Sync (Flow: Left to Right)
-      // Propagates Transformation JSON and Reference Image to the Destination Image Node
+      // 3. Transformation -> Image Sync (Recursividad Infinita)
       if (targetNode.type === NodeType.Image && sourceNode.type === NodeType.Transformation) {
           const transformData = sourceNode.data as TransformationData;
           const imageData = targetNode.data as ImageData;
           
-          const json = transformData.transformationJson;
-          const base64 = transformData.referenceImage;
+          // Datos que salen del nodo de transformación anterior
+          const jsonOut = transformData.transformationJson;
+          
+          // IMPORTANTE: Para la imagen, priorizamos la que se muestra en el nodo de transformación (si existiera una preview final)
+          // Pero como el nodo de transformación es "lógico", la imagen resultante en realidad se genera en el SIGUIENTE nodo de imagen.
+          // Por lo tanto, lo que pasamos aquí es la "Instrucción" para que el nodo de imagen se autogenere.
+          
+          const refImage = transformData.referenceImage; // La imagen base original
 
-          // Only propagate if we have valid transformation data (Reference Image + JSON Instruction)
-          if (json && base64) {
-              
-              const incomingJsonStr = JSON.stringify(json);
+          if (jsonOut && refImage) {
+              const incomingJsonStr = JSON.stringify(jsonOut);
               const currentJsonStr = JSON.stringify(imageData.incomingTransformationData?.json);
-              const incomingRef = base64;
-              const currentRef = imageData.incomingTransformationData?.referenceImage;
 
-              // Check if update is needed to avoid infinite loop
+              // Evitar bucles infinitos
               if (
                   imageData.mode !== 'transformation' || 
-                  incomingJsonStr !== currentJsonStr || 
-                  incomingRef !== currentRef
+                  incomingJsonStr !== currentJsonStr
               ) {
+                  console.log(`🔗 Chaining Transformation: ${sourceNode.id} -> ${targetNode.id}`);
+                  
                   updateNodeData(targetNode.id, {
                       mode: 'transformation',
                       incomingTransformationData: {
-                          json: json,
-                          referenceImage: base64 
+                          json: jsonOut,        // El JSON transformado se convierte en el nuevo "Script"
+                          referenceImage: refImage // Pasamos la imagen base (o podríamos pasar la resultante si la tuviéramos)
                       },
-                      enrichedSceneJson: null,
+                      enrichedSceneJson: null, // Limpiamos datos viejos
                       sceneEnrichmentStatus: 'success'
                   });
               }

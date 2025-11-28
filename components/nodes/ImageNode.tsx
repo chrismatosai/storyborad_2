@@ -5,6 +5,7 @@ import { ErrorInspector } from '../ui/ErrorInspector';
 import { CinematicInspector } from '../ui/CinematicInspector';
 import { CinematicJSON } from '../../types/cinematicSchema';
 import { Handle } from './Handle';
+import { fileToBase64 } from '../../utils/file';
 
 interface ImageNodeProps {
   node: Node<ImageData>;
@@ -36,6 +37,24 @@ export const ImageNode = React.memo(({ node, onGenerate, updateNodeData, connect
     }
   };
 
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) {
+      const fullBase64 = await fileToBase64(e.target.files[0]);
+      
+      // [FIX] CRÍTICO: Eliminamos el prefijo "data:image/png;base64," 
+      // para guardar solo la data cruda, ya que el render lo agrega después.
+      const rawBase64 = fullBase64.split(',')[1]; 
+
+      updateNodeData(node.id, { 
+          image: rawBase64, 
+          error: undefined, 
+          isLoading: false,
+          // Importante: Marcar modo standard para que no busque inputs de transformación
+          mode: 'standard' 
+      });
+    }
+  };
+
   const handleRegenerateSpecs = useCallback(() => {
     updateNodeData(node.id, {
         enrichedSceneJson: null,
@@ -53,8 +72,11 @@ export const ImageNode = React.memo(({ node, onGenerate, updateNodeData, connect
     <div className="p-3 space-y-2 relative min-w-[280px]">
         
         {/* Output Handle */}
-        <div className="absolute group z-50" style={{ right: '-12px', top: '50%', transform: 'translateY(-50%)' }}>
-             <span className="absolute right-full top-1/2 -translate-y-1/2 mr-2 text-xs text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap bg-black/60 px-1 rounded">Image Output</span>
+        <div className="absolute group/output z-50 flex items-center justify-center" style={{ right: '-12px', top: '50%', transform: 'translateY(-50%)' }}>
+             {/* Tooltip: Solo visible al hacer hover específico en este contenedor (group/output) */}
+             <span className="absolute right-full top-1/2 -translate-y-1/2 mr-2 text-[10px] font-bold text-gray-200 opacity-0 group-hover/output:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap bg-black/90 px-2 py-1 rounded border border-gray-600 shadow-xl">
+                Image Output
+             </span>
             <Handle
                 type="output"
                 ref={(el) => {
@@ -63,7 +85,7 @@ export const ImageNode = React.memo(({ node, onGenerate, updateNodeData, connect
                   else delete connectorRefs.current[key];
                 }}
                 onMouseDown={(e) => onConnectorMouseDown(e, node.id, 0)}
-                className="shadow-md"
+                className="shadow-md hover:scale-125 transition-transform"
             />
         </div>
 
@@ -102,7 +124,7 @@ export const ImageNode = React.memo(({ node, onGenerate, updateNodeData, connect
             )}
         </div>
       ) : (
-        <div className="relative w-full min-h-[250px] rounded-md border border-gray-600 border-dashed bg-gray-700/30 flex justify-center items-center flex-col gap-2 select-none">
+        <div className="relative w-full min-h-[250px] rounded-md border border-gray-600 border-dashed bg-gray-700/30 flex justify-center items-center flex-col gap-2 select-none hover:bg-gray-700/50 transition-colors">
              {node.data.isLoading ? (
                  <>
                     <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-yellow-400 z-10"></div>
@@ -110,12 +132,24 @@ export const ImageNode = React.memo(({ node, onGenerate, updateNodeData, connect
                  </>
              ) : (
                  <>
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <span className="text-xs font-medium opacity-60">
-                        {isTransformationMode ? 'Ready for Transformation' : 'Waiting for Input...'}
-                    </span>
+                    <input 
+                        type="file" 
+                        className="hidden" 
+                        id={`upload-${node.id}`} 
+                        accept="image/*" 
+                        onChange={handleUpload} 
+                    />
+                    <label htmlFor={`upload-${node.id}`} className="cursor-pointer flex flex-col items-center gap-2 w-full h-full justify-center py-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 opacity-40 hover:opacity-60 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span className="text-xs font-medium opacity-60">
+                            {isTransformationMode ? 'Ready for Transformation' : 'Waiting for Input / Upload'}
+                        </span>
+                        <span className="text-[10px] bg-gray-700 px-2 py-1 rounded text-gray-300 border border-gray-600 mt-2 shadow-sm hover:border-gray-500 hover:text-white transition-colors">
+                             📤 Upload Manually
+                        </span>
+                    </label>
                  </>
              )}
         </div>
@@ -137,7 +171,9 @@ export const ImageNode = React.memo(({ node, onGenerate, updateNodeData, connect
             isTransformationMode ? 'bg-pink-600 hover:bg-pink-700' : 'bg-yellow-600 hover:bg-yellow-700'
         } text-white`}
       >
-        {node.data.isLoading ? 'Generating...' : (isTransformationMode ? 'Run Transformation' : 'Generate Image')}
+        {node.data.isLoading ? 'Generating...' : (
+            isTransformationMode ? 'Run Transformation' : (node.data.image ? 'Regenerate (Overwrite)' : 'Generate Image')
+        )}
       </button>
 
       {/* Error Message */}

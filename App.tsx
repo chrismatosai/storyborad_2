@@ -221,39 +221,64 @@ export default function App() {
         onMouseDown={viewportHandlers.onMouseDown} // Use viewport handlers for background pan
         onWheel={viewportHandlers.onWheel}
     >
-      {/* Toolbar */}
-      <div className="absolute top-4 left-4 z-20 flex gap-2 p-2 bg-gray-800/80 backdrop-blur-sm rounded-lg shadow-lg flex-wrap max-w-[90vw]">
-        {(Object.keys(NodeType) as Array<keyof typeof NodeType>).map(key => (
-          <button
-            key={key as string}
-            onClick={() => actions.addNode(NodeType[key])}
-            className={`px-3 py-2 text-sm font-semibold rounded-md text-white ${NODE_CONFIG[NodeType[key]].color} hover:opacity-80 transition-opacity`}
-          >
-            Add {NODE_CONFIG[NodeType[key]].title}
-          </button>
-        ))}
-        <div className="ml-4 pl-4 border-l border-gray-600 flex gap-2">
-            <button
-                onClick={handleSave}
-                className="px-3 py-2 text-sm font-semibold rounded-md text-white bg-gray-600 hover:bg-gray-700 transition-colors"
-            >
-                Save Flow
-            </button>
-            <button
-                onClick={() => fileInputRef.current?.click()}
-                className="px-3 py-2 text-sm font-semibold rounded-md text-white bg-gray-600 hover:bg-gray-700 transition-colors"
-            >
-                Load Flow
-            </button>
-            <input type="file" ref={fileInputRef} onChange={handleLoad} style={{ display: 'none' }} accept=".json" />
-             <button
-                onClick={generateAll}
-                disabled={isGeneratingAll}
-                className="px-3 py-2 text-sm font-semibold rounded-md text-white bg-indigo-600 hover:bg-indigo-700 transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed"
-            >
-                {isGeneratingAll ? 'Generating All...' : 'Generate All Scenes'}
-            </button>
-        </div>
+      {/* Top Right Actions Toolbar */}
+      <div className="absolute top-4 right-4 z-50 flex gap-2">
+        {/* Save Button */}
+        <button
+            onClick={handleSave}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white text-xs font-bold rounded-full border border-gray-600 transition-colors shadow-sm"
+            title="Save Project"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+            </svg>
+            <span>Save</span>
+        </button>
+
+        {/* Load Button */}
+        <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white text-xs font-bold rounded-full border border-gray-600 transition-colors shadow-sm"
+            title="Load Project"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            <span>Load</span>
+        </button>
+        <input type="file" ref={fileInputRef} onChange={handleLoad} style={{ display: 'none' }} accept=".json" />
+
+        {/* Generate All Button (Indigo) */}
+        <button
+            onClick={generateAll}
+            disabled={isGeneratingAll}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-full border border-indigo-500 transition-colors shadow-sm disabled:opacity-50"
+            title="Generate All Scenes"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>{isGeneratingAll ? 'Generating...' : 'Run All'}</span>
+        </button>
+
+        {/* New Project / Reset Button */}
+        <button 
+          onClick={handleReset}
+          className={`
+            flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-full border transition-all duration-200 shadow-sm
+            ${isConfirmingReset 
+              ? 'bg-red-900/80 text-white border-red-500 hover:bg-red-800' 
+              : 'bg-gray-800 hover:bg-gray-700 text-white border-gray-600'
+            }
+          `}
+          title="Clear Canvas"
+        >
+           <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 ${isConfirmingReset ? 'text-white' : 'text-red-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-4v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          <span>{isConfirmingReset ? "Confirm?" : "Reset"}</span>
+        </button>
       </div>
 
       <FlowCanvas 
@@ -274,28 +299,64 @@ export default function App() {
         connectingToPos={connectingToPos}
       />
 
-      {/* Persistence Status Indicator & New Project Button */}
-      <div className="absolute bottom-4 right-4 flex items-center gap-3 z-50">
-        <button 
-          onClick={handleReset}
-          className={`
-            text-xs px-3 py-1 rounded-full border transition-all duration-200 backdrop-blur-sm
-            ${isConfirmingReset 
-              ? 'bg-red-600 text-white border-red-400 font-bold scale-105' // Estado Alerta
-              : 'bg-red-900/80 hover:bg-red-800 text-red-200 border-red-800' // Estado Normal
-            }
-          `}
-        >
-          {isConfirmingReset ? "⚠️ ¿CONFIRMAR?" : "🗑️ Nuevo Proyecto"}
-        </button>
-
-        <div className="bg-gray-800 text-white text-xs px-3 py-1 rounded-full border border-gray-700 shadow-lg flex items-center gap-2 opacity-80 hover:opacity-100 transition-opacity">
-            {persistenceStatus === 'idle' && <span className="flex items-center gap-1"><span className="text-gray-400">☁️</span> Ready</span>}
-            {persistenceStatus === 'loading' && <span className="flex items-center gap-1"><span className="animate-spin">📂</span> Loading...</span>}
-            {persistenceStatus === 'saving' && <span className="flex items-center gap-1 text-blue-300"><span className="animate-pulse">💾</span> Saving...</span>}
+      {/* Persistence Status Indicator Only */}
+      <div className="absolute bottom-4 right-4 z-50">
+        <div className="bg-gray-900/80 backdrop-blur text-white text-[10px] px-3 py-1.5 rounded-full border border-gray-700 shadow-lg flex items-center gap-2">
+            {persistenceStatus === 'idle' && <span className="flex items-center gap-1 text-gray-400"><span>☁️</span> Saved</span>}
+            {persistenceStatus === 'loading' && <span className="flex items-center gap-1"><span className="animate-spin">📂</span> Syncing...</span>}
+            {persistenceStatus === 'saving' && <span className="flex items-center gap-1 text-blue-400"><span className="animate-pulse">💾</span> Saving...</span>}
             {persistenceStatus === 'saved' && <span className="flex items-center gap-1 text-green-400"><span>✅</span> Saved</span>}
-            {persistenceStatus === 'error' && <span className="flex items-center gap-1 text-red-400"><span>⚠️</span> Save Error</span>}
+            {persistenceStatus === 'error' && <span className="flex items-center gap-1 text-red-400"><span>⚠️</span> Error</span>}
         </div>
+      </div>
+
+      {/* Node Toolbar (Bottom Left - Floating Pills) */}
+      <div className="absolute bottom-4 left-4 z-50 flex gap-2 items-end">
+         
+         {/* Mapping logic with Inline SVGs for zero-dependency icons */}
+         {(Object.keys(NodeType) as Array<keyof typeof NodeType>).map(key => {
+            const config = NODE_CONFIG[NodeType[key]];
+            
+            // Icon Mapping
+            let iconPath = <path d="" />;
+            switch(NodeType[key]) {
+                case 'CHARACTER': // User/Person Icon
+                    iconPath = <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />;
+                    break;
+                case 'SETTING': // Map/Location Icon
+                    iconPath = <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z" />;
+                    break;
+                case 'SCRIPT': // Document Icon
+                    iconPath = <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />;
+                    break;
+                case 'IMAGE': // Photo Icon
+                    iconPath = <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />;
+                    break;
+                case 'TRANSFORMATION': // Sparkles/Magic Icon
+                    iconPath = <path strokeLinecap="round" strokeLinejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />;
+                    break;
+                case 'VIDEO': // Video Camera Icon
+                    iconPath = <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />;
+                    break;
+            }
+
+            return (
+              <button
+                key={key as string}
+                onClick={() => actions.addNode(NodeType[key])}
+                className={`
+                  flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold text-white transition-all duration-200 shadow-md hover:scale-105 hover:shadow-lg border border-white/10
+                  ${config.color}
+                `}
+                title={`Add ${config.title}`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    {iconPath}
+                </svg>
+                <span>{config.title}</span>
+              </button>
+            );
+         })}
       </div>
 
     </div>

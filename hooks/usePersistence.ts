@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { saveProject, loadProject, deleteProject } from '../services/persistence/db';
 import { Graph } from '../types/graph';
@@ -39,19 +38,31 @@ export const usePersistence = (
 
     setStatus('saving');
 
+    let idleCallbackId: number | undefined;
+
     // Wait 2 seconds of inactivity before saving
-    const timeoutId = setTimeout(async () => {
-      try {
-        await saveProject(projectId, currentGraph);
-        setStatus('saved');
-      } catch (error) {
-        console.error("Error auto-saving:", error);
-        setStatus('error');
-      }
+    const timeoutId = setTimeout(() => {
+      // NON-BLOCKING SAVE:
+      // Use requestIdleCallback to schedule serialization/saving when the main thread is free.
+      // This prevents the UI from freezing if the graph contains large images.
+      idleCallbackId = window.requestIdleCallback(async () => {
+        try {
+          await saveProject(projectId, currentGraph);
+          setStatus('saved');
+        } catch (error) {
+          console.error("Error auto-saving:", error);
+          setStatus('error');
+        }
+      });
     }, 2000);
 
-    // If user makes changes before 2s, cancel previous save and restart timer
-    return () => clearTimeout(timeoutId);
+    // Cleanup: If user makes changes before 2s OR before the idle callback runs, cancel everything.
+    return () => {
+      clearTimeout(timeoutId);
+      if (idleCallbackId !== undefined) {
+        window.cancelIdleCallback(idleCallbackId);
+      }
+    };
 
   }, [currentGraph, projectId]);
 

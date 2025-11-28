@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Node, CharacterData } from '../../types/graph';
 import { fileToBase64 } from '../../utils/file';
-import { analyzeCharacterImage } from '../../services/geminiService';
+import { analyzeCharacterImage, generateReferenceAsset } from '../../services/geminiService';
 import { CharacterPassport } from '../../types/cinematicSchema';
 
 interface CharacterNodeProps {
@@ -61,6 +61,10 @@ const PassportInspector = ({ passport }: { passport: CharacterPassport }) => {
 export const CharacterNode = React.memo(({ node, updateNodeData }: CharacterNodeProps) => {
   const [isDescriptionOpen, setIsDescriptionOpen] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
+  // New State for Generator Mode
+  const [inputMode, setInputMode] = useState<'upload' | 'generate'>('upload');
+  const [genPrompt, setGenPrompt] = useState('');
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
@@ -73,7 +77,7 @@ export const CharacterNode = React.memo(({ node, updateNodeData }: CharacterNode
       setIsAnalyzing(true);
       try {
         console.log("👁️ Character Node: Analyzing image for biometric profile...");
-        const passport = await analyzeCharacterImage(base64);
+        const passport = await analyzeCharacterImage(base64, node.data.clothingImage);
         
         if (passport) {
              updateNodeData(node.id, { 
@@ -91,33 +95,173 @@ export const CharacterNode = React.memo(({ node, updateNodeData }: CharacterNode
     }
   };
 
+  const handleClothingUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) {
+       const clothingBase64 = await fileToBase64(e.target.files[0]);
+       
+       // 1. Guardar la imagen de ropa
+       updateNodeData(node.id, { clothingImage: clothingBase64 });
+
+       // 2. Si ya tenemos cara, re-analizamos todo para mezclar (Fusión)
+       if (node.data.image) {
+           setIsAnalyzing(true);
+           try {
+               console.log("👕 Merging Clothing DNA...");
+               const passport = await analyzeCharacterImage(node.data.image, clothingBase64);
+               if (passport) {
+                   updateNodeData(node.id, { 
+                       clothingImage: clothingBase64, // Reiteramos para asegurar
+                       prompt: passport.description,
+                       characterPassport: passport 
+                   });
+               }
+           } catch (err) {
+               console.error("Clothing merge failed", err);
+           } finally {
+               setIsAnalyzing(false);
+           }
+       }
+    }
+  };
+
+  const handleGenerate = async () => {
+    if (!genPrompt.trim()) return;
+    
+    setIsAnalyzing(true);
+    try {
+        console.log("🎨 Generating Character Concept...");
+        // 1. Generar la Imagen Base (Text-to-Image)
+        const base64Image = await generateReferenceAsset(genPrompt);
+        
+        // Actualizamos visualmente de inmediato
+        updateNodeData(node.id, { image: base64Image });
+
+        console.log("🧬 Analyzing Generated Identity...");
+        // 2. Analizar la imagen generada para obtener el Passport (Image-to-Text/JSON)
+        const passport = await analyzeCharacterImage(base64Image, node.data.clothingImage);
+
+        if (passport) {
+            updateNodeData(node.id, { 
+                image: base64Image,
+                prompt: passport.description, // La IA describe su propia creación
+                characterPassport: passport
+            });
+            setIsDescriptionOpen(true);
+        }
+    } catch (error) {
+        console.error("Generation failed:", error);
+        // Opcional: Manejar error visualmente aquí
+    } finally {
+        setIsAnalyzing(false);
+    }
+  };
+
   return (
     <div className="p-3 space-y-3">
+      
+      {/* Input Mode Tabs */}
+      <div className="flex bg-gray-900 p-1 rounded-lg border border-gray-700 mb-2">
+          <button
+              onClick={() => setInputMode('upload')}
+              className={`flex-1 text-[10px] py-1 rounded-md transition-colors ${inputMode === 'upload' ? 'bg-gray-700 text-white font-bold' : 'text-gray-500 hover:text-gray-300'}`}
+          >
+              📁 Upload
+          </button>
+          <button
+              onClick={() => setInputMode('generate')}
+              className={`flex-1 text-[10px] py-1 rounded-md transition-colors ${inputMode === 'generate' ? 'bg-indigo-900/50 text-indigo-200 font-bold' : 'text-gray-500 hover:text-gray-300'}`}
+          >
+              ✨ Generate
+          </button>
+      </div>
+
       {/* Image Area with Overlay */}
       <div className="relative w-full h-40 bg-gray-900 rounded border border-gray-700 overflow-hidden group shadow-sm hover:border-blue-500/50 transition-colors">
            {node.data.image ? (
-              <img src={node.data.image} className="w-full h-full object-cover" alt="Character" />
+              <img 
+                src={node.data.image.startsWith('data:') ? node.data.image : `data:image/png;base64,${node.data.image}`} 
+                className="w-full h-full object-cover" 
+                alt="Character" 
+              />
           ) : (
-               <div className="flex flex-col items-center justify-center h-full text-gray-500 text-xs gap-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                  <span>Upload Reference</span>
+               <div className="flex flex-col items-center justify-center h-full text-gray-500 text-xs gap-2 p-2 bg-gray-800/30">
+                  {inputMode === 'upload' ? (
+                      <>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                          <span>Upload Reference</span>
+                      </>
+                  ) : (
+                      <div className="w-full flex flex-col gap-2 animate-in fade-in" onClick={e => e.preventDefault()}>
+                          <textarea 
+                              className="w-full bg-black/50 border border-indigo-500/30 rounded p-1 text-[10px] text-gray-300 resize-none focus:outline-none focus:border-indigo-500"
+                              rows={3}
+                              placeholder="e.g. A cyberpunk samurai with neon armor..."
+                              value={genPrompt}
+                              onChange={(e) => setGenPrompt(e.target.value)}
+                          />
+                          <button 
+                              className="bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] py-1 rounded font-bold transition-colors"
+                              onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  handleGenerate();
+                              }}
+                          >
+                              Generate Concept
+                          </button>
+                      </div>
+                  )}
               </div>
           )}
           
-          {/* Hidden File Input */}
-           <label className="absolute inset-0 cursor-pointer flex items-center justify-center hover:bg-black/20 transition-colors" title="Click to upload character image">
-               <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-           </label>
+          {/* Hidden File Input - Only active in upload mode */}
+           {inputMode === 'upload' && (
+             <label className="absolute inset-0 cursor-pointer flex items-center justify-center hover:bg-black/20 transition-colors" title="Click to upload character image">
+                 <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+             </label>
+           )}
 
            {/* Analysis Loading Overlay */}
            {isAnalyzing && (
               <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-20 backdrop-blur-sm cursor-wait">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-2 shadow-[0_0_10px_rgba(59,130,246,0.5)]"></div>
-                  <span className="animate-pulse text-blue-400 font-bold text-xs tracking-wide">Analyzing Visual DNA...</span>
+                  <span className="animate-pulse text-blue-400 font-bold text-xs tracking-wide">
+                      {inputMode === 'generate' ? "Generating & Analyzing..." : "Analyzing Visual DNA..."}
+                  </span>
               </div>
           )}
+      </div>
+
+      {/* Body/Clothing Reference Upload */}
+      <div className="flex gap-2 items-start p-2 bg-gray-900/50 rounded border border-gray-700">
+          {/* Mini Preview / Upload Box */}
+          <div className="relative w-16 h-16 bg-gray-800 rounded border border-gray-600 shrink-0 overflow-hidden group hover:border-blue-400 transition-colors">
+              {node.data.clothingImage ? (
+                  <img 
+                      src={node.data.clothingImage.startsWith('data:') ? node.data.clothingImage : `data:image/png;base64,${node.data.clothingImage}`} 
+                      className="w-full h-full object-cover" 
+                      alt="Body Ref" 
+                  />
+              ) : (
+                  <div className="flex items-center justify-center h-full text-gray-500">
+                      <span className="text-xs">👕</span>
+                  </div>
+              )}
+              <label className="absolute inset-0 cursor-pointer flex items-center justify-center bg-black/0 hover:bg-black/40 transition-colors">
+                  <input type="file" accept="image/*" onChange={handleClothingUpload} className="hidden" />
+                  <span className="opacity-0 group-hover:opacity-100 text-[8px] text-white font-bold">UPLOAD</span>
+              </label>
+          </div>
+
+          {/* Label / Context */}
+          <div className="flex flex-col justify-center h-16">
+              <span className="text-[10px] font-bold text-gray-400 uppercase">Body & Clothing Ref</span>
+              <span className="text-[9px] text-gray-500 leading-tight">
+                  Upload a full-body shot to lock outfit consistency.
+              </span>
+          </div>
       </div>
 
       {/* Description Area */}

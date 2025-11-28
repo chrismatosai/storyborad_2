@@ -15,6 +15,7 @@ export interface NodeData {}
 export interface CharacterData extends NodeData {
   prompt: string;
   image?: string; // base64
+  clothingImage?: string; // base64 (Body/Outfit Ref)
   characterPassport?: CharacterPassport;
 }
 

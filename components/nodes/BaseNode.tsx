@@ -73,7 +73,13 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
       {/* Inputs Column */}
       <div className="absolute top-0 left-0 h-full -translate-x-1/2 flex flex-col justify-around pointer-events-none">
         {config.inputs.map((input, i) => (
-          <div key={i} className="pointer-events-auto" title={input}>
+          <div key={i} className="pointer-events-auto group/input relative flex items-center justify-center z-50">
+             
+             {/* Tooltip: Aparece A LA IZQUIERDA del conector solo al hacer hover */}
+             <span className="absolute right-full top-1/2 -translate-y-1/2 mr-2 text-[10px] font-bold text-gray-200 opacity-0 group-hover/input:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap bg-black/90 px-2 py-1 rounded border border-gray-600 shadow-xl">
+                {input}
+             </span>
+
              <Handle
                 type="input"
                 ref={(el) => {
@@ -84,7 +90,7 @@ export const BaseNode: React.FC<BaseNodeProps> = ({
                 isConnected={checkInputConnection(i)}
                 onMouseUp={(e) => onConnectorMouseUp(e, node.id, i)}
                 onDisconnect={() => onDisconnectInput && onDisconnectInput(node.id, i)}
-                className="relative shadow-md"
+                className="relative shadow-md hover:scale-125 transition-transform"
              />
           </div>
         ))}
