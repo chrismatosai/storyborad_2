@@ -1,65 +1,36 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { CinematicPrompt, SceneEntity, CompositionElement, CinematicJSON, CharacterPassport, SettingPassport } from "../types/cinematicSchema";
 import { CharacterData, SettingData } from "../types/graph";
 import { safeJsonParse } from "../utils/jsonRepair";
 
 const SCHEMA_DEFINITION = `
-interface LightingGlobals {
-  type: string;
-  quality: string[];
-  color_temperature: string;
-}
-
-interface CompositionElement {
-  description: string;
-  focus_target_id?: string;
-  position?: string;
-  focus_state?: string;
-  texture?: string;
-}
-
-interface EntityDetail {
-  pose: string;
-  facial_expression: string;
-  clothing: string;
-  skin_texture: string;
-}
-
-interface SceneEntity {
-  id: string;
-  type: string; // "character"
-  description: string;
-  placement_plane: string; // e.g. foreground, midground, background
-  details: EntityDetail;
-}
-
-interface CameraSettings {
-  lens_focal_length: string; // e.g. 35mm, 85mm
-  aperture: string; // e.g. f/1.8
-  depth_of_field: string; // e.g. shallow, deep
-  shot_type: string; // e.g. close-up, wide shot
-  angle: string; // e.g. eye-level, low angle
-  aspect_ratio: string; // e.g. 16:9, 2.39:1
-}
-
-interface Presentation {
-    camera: CameraSettings;
-    film_grain?: string;
-    color_grading?: string;
-}
-
-interface SceneGlobals {
-    lighting: LightingGlobals;
-    atmosphere?: string;
-    time_of_day?: string;
-    weather?: string;
-}
-
-interface CinematicPrompt {
-  scene_globals: SceneGlobals;
-  composition: CompositionElement[];
-  entities: SceneEntity[];
-  presentation: Presentation;
+interface CinematicJSON {
+  subjects: {
+    main_subject: string;
+    clothing_details: string;
+    action_pose: string;
+    expression_mood: string;
+  };
+  scene_globals: {
+    description: string;
+    mood: string;
+  };
+  composition: {
+    frame_size: string;
+    depth_of_field: string;
+    angle: string;
+    foreground: { description: string };
+    background: { description: string };
+  };
+  style: {
+    visual_style: string;
+    color_palette: { dominant: string[]; accents: string[] };
+    lighting: { type: string; mood: string };
+  };
+  presentation: {
+    camera: { lens_focal_length: string; aperture: string; shot_type: string };
+  };
 }
 `;
 
@@ -149,12 +120,11 @@ export const enrichSceneDescription = async (userDescription: string): Promise<P
   
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-  const systemInstruction = `You are a Cinematographer AI. Analyze the user's scene description and output a VALID JSON object matching the CinematicPrompt structure provided below.
-  Infer mood, lighting, and camera details if not specified to create a cinematic shot.
+  // NOTE: This function returns Partial<CinematicPrompt> for legacy support, 
+  // but fetchCinematicSpec below uses the new CinematicJSON.
+  // We keep this function as is for now or deprecated.
   
-  Schema:
-  ${SCHEMA_DEFINITION}
-  `;
+  const systemInstruction = `You are a Cinematographer AI. Analyze the user's scene description and output a VALID JSON object.`;
 
   try {
     const response = await ai.models.generateContent({
@@ -169,7 +139,6 @@ export const enrichSceneDescription = async (userDescription: string): Promise<P
     const text = response.text;
     if (!text) return {};
     
-    // Use safeJsonParse to handle potential markdown wrapping or malformed strings
     return safeJsonParse<Partial<CinematicPrompt>>(text, {});
 
   } catch (error) {
@@ -178,6 +147,7 @@ export const enrichSceneDescription = async (userDescription: string): Promise<P
   }
 };
 
+// Legacy function kept for reference but might not be used in V2 pipeline
 export const assembleMasterPrompt = (
   sceneJson: Partial<CinematicPrompt>, 
   characterData?: CharacterData, 
@@ -208,32 +178,10 @@ export const assembleMasterPrompt = (
 
     if (characterJson) {
         master.entities.push(characterJson);
-    } else if (characterData && characterData.prompt) {
-        const charEntity: SceneEntity = {
-            id: "character_main_provided",
-            type: "character",
-            description: characterData.prompt,
-            placement_plane: "foreground",
-            details: {
-                pose: "contextual",
-                facial_expression: "contextual",
-                clothing: "as described",
-                skin_texture: "detailed"
-            }
-        };
-        master.entities.push(charEntity);
     }
 
     if (settingJson) {
          master.composition.push(settingJson);
-    } else if (settingData && settingData.prompt) {
-        const settingElement: CompositionElement = {
-            description: settingData.prompt,
-            position: "background",
-            focus_state: "in focus",
-            texture: "detailed"
-        };
-        master.composition.push(settingElement);
     }
 
     return master;
@@ -244,7 +192,7 @@ export const generateCharacterProfilePrompt = (userInput: string): string => {
     ACT AS A CINEMATIC CHARACTER DESIGNER.
     Analyze the following character description or input: "${userInput}".
     
-    Output a strictly valid JSON object (no markdown, no comments) representing the "Visual DNA" of this character.
+    Output a strictly valid JSON object.
     Structure:
     {
       "character_id": "main_subject",
@@ -285,10 +233,7 @@ export const fetchCharacterPassport = async (description: string): Promise<Chara
 };
 
 /**
- * Construye el Prompt Maestro para convertir texto de guion en JSON Cinematográfico.
- * @param scriptText - El texto que viene del nodo verde (Script Node).
- * @param characterProfile - (Opcional) Datos del nodo de personaje si está conectado.
- * @param settingProfile - (Opcional) Datos del nodo de escenario si está conectado.
+ * Construye el Prompt Maestro para convertir texto de guion en JSON Cinematográfico (NUEVO ESQUEMA).
  */
 export const buildScenePrompt = (
   scriptText: string, 
@@ -300,12 +245,9 @@ export const buildScenePrompt = (
   const charSection = characterProfile 
     ? `
       [[🔴 CRITICAL INSTRUCTION: CHARACTER VISUAL LOCK]]
-      You MUST use the provided Character Profile.
-      - ID: "${characterProfile.character_id}"
-      - DESCRIPTION: "${characterProfile.description}"
-      
-      MANDATORY VISUAL TRAITS (Copy strictly to JSON):
-      ${JSON.stringify(characterProfile.facialCompositeProfile)}
+      You MUST use the provided Character Profile to populate "subjects".
+      - Main Subject: "${characterProfile.description}"
+      - Clothing: "${characterProfile.visual_dna?.clothing || "As defined"}"
       `
     : "";
 
@@ -314,11 +256,8 @@ export const buildScenePrompt = (
     ? `
       [[🟢 CRITICAL INSTRUCTION: SETTING VISUAL LOCK]]
       The scene MUST take place in this exact environment.
-      
-      MANDATORY SETTING STYLE:
-      ${JSON.stringify(settingProfile.style)}
-      
-      Context Description: ${settingProfile.scene_description}
+      - Setting Description: ${settingProfile.scene_description}
+      - Style/Mood: ${JSON.stringify(settingProfile.style)}
       `
     : "";
 
@@ -337,78 +276,14 @@ export const buildScenePrompt = (
     
     DATA MAPPING RULES (STRICT):
     1. scene_globals.description -> MUST correspond to "SCRIPT ACTION".
-    2. character[0].description -> MUST be exactly "${characterProfile ? characterProfile.description : "Inferred from script"}" (Do not hallucinate a new description).
-    3. character[0].facialCompositeProfile -> MUST be the "MANDATORY VISUAL TRAITS" JSON provided above.
+    2. subjects.main_subject -> "${characterProfile ? characterProfile.description : "Inferred from script"}"
+    3. subjects.clothing_details -> "${characterProfile ? (characterProfile.visual_dna?.clothing || "Standard") : "Inferred"}"
+    4. subjects.action_pose -> Inferred from SCRIPT ACTION.
     
     OUTPUT FORMAT: JSON ONLY (No markdown).
     
     TARGET JSON SCHEMA (Strict):
-    {
-      "scene_globals": {
-        "description": "The cinematic scene description based on SCRIPT ACTION",
-        "mood": ["Mood1", "Mood2"],
-        "lighting_globals": {
-          "type": "Primary lighting type",
-          "quality": ["High contrast", "Soft"],
-          "color_temperature": "e.g. Cool cyan vs Warm orange"
-        }
-      },
-      "composition": {
-        "background": { "description": "Distant elements" },
-        "midground": { "description": "Mid-plane elements" },
-        "foreground": { "description": "Closest elements" },
-        "frame_element": {
-          "description": "Optional framing object",
-          "position": "Overlay",
-          "focus_state": "Blurred",
-          "texture": "Texture details"
-        }
-      },
-      "character": [
-        {
-          "id": "${characterProfile ? characterProfile.character_id : "main_subject"}",
-          "type": "person",
-          "description": "The character description text",
-          "placement_plane": "foreground OR midground",
-          "facialCompositeProfile": {
-            "faceShape": "String",
-            "skinTone": "String",
-            "forehead": "String",
-            "eyebrows": { "shape": "String", "density": "String" },
-            "eyes": { "color": "String", "shape": "String" },
-            "nose": { "shape": "String", "size": "String" },
-            "mouth": { "shape": "String", "expression": "String" }
-          },
-          "details": {
-            "pose": "Action/Pose based on SCRIPT ACTION",
-            "facial_expression": {
-              "emotion": "Inferred emotion",
-              "description": "Micro-expressions"
-            },
-            "clothing": {
-              "items": "Clothing description",
-              "texture": "Fabric details"
-            },
-            "skin_texture": {
-              "details": "Pores, sweat, makeup",
-              "imperfections": "Scars, moles"
-            }
-          }
-        }
-      ],
-      "presentation": {
-        "style": ["Photorealistic", "Cinematic", "8k"],
-        "materials": { "film_grain": "ISO value" },
-        "camera": {
-          "lens_focal_length": "e.g. 35mm, 85mm",
-          "aperture": "e.g. f/1.8",
-          "depth_of_field": "Shallow/Deep",
-          "shot_type": "Wide / Medium / Close-up",
-          "angle": "Low / High / Eye-level",
-          "aspect_ratio": "16:9"
-        }
-      }
-    }
+    ${SCHEMA_DEFINITION}
   `;
 };
 
@@ -457,11 +332,14 @@ export const transformCinematicSpec = async (
     MODIFICATION PROMPT:
     "${modificationPrompt}"
     
+    TARGET SCHEMA:
+    ${SCHEMA_DEFINITION}
+    
     INSTRUCTIONS:
-    1. Analyze the Modification Prompt to identify what needs to change (e.g., Lighting, Mood, Camera Angle, Character Action).
+    1. Analyze the Modification Prompt to identify what needs to change.
     2. Apply these changes to the relevant fields in the JSON.
     3. KEEP ALL OTHER FIELDS UNCHANGED unless they contradict the modification.
-    4. Ensure the output is a VALID JSON object matching the CinematicPrompt schema exactly.
+    4. Ensure the output is a VALID JSON object matching the CinematicJSON schema exactly.
     
     OUTPUT FORMAT: JSON ONLY (No markdown).
     `;
@@ -473,8 +351,7 @@ export const transformCinematicSpec = async (
             config: { responseMimeType: 'application/json' }
         });
         
-        // Usamos la misma utilidad segura de parseo
-        return safeJsonParse<CinematicJSON>(response.text, sourceJson); // Fallback al original si falla
+        return safeJsonParse<CinematicJSON>(response.text, sourceJson);
     } catch (e) {
          console.error("Cinematic Transformation failed", e);
          return null;

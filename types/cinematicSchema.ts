@@ -1,3 +1,4 @@
+
 export interface LightingGlobals {
   type: string;
   quality: string[];
@@ -78,64 +79,32 @@ export interface CharacterPassport {
   };
 }
 
+// UPDATED INTERFACE V2
 export interface CinematicJSON {
+  subjects: {
+    main_subject: string; // e.g., "A grizzled detective in a trench coat"
+    clothing_details: string; // e.g., "Wet, rumpled beige trench coat over a dark suit"
+    action_pose: string; // e.g., "Standing hunched, lighting a cigarette"
+    expression_mood: string; // e.g., "Weary, cynical expression"
+  };
   scene_globals: {
     description: string;
-    mood: string[];
-    lighting_globals: {
-      type: string;
-      quality: string[];
-      color_temperature: string;
-    };
+    mood: string;
   };
   composition: {
+    frame_size: string; // e.g., "Medium Shot"
+    depth_of_field: string; // e.g., "Shallow Focus"
+    angle: string; // e.g., "Eye Level"
+    foreground: { description: string };
     background: { description: string };
-    midground: { description: string };
-    foreground: { 
-      description: string;
-      focus_target_id?: string; 
-    };
-    frame_element?: {
-      description: string;
-      position: string;
-      focus_state: string;
-      texture: string;
-    };
   };
-  character: Array<{
-    id: string;
-    type: string;
-    description: string;
-    placement_plane: string; 
-    facialCompositeProfile?: FacialComposite;
-    details: {
-      pose: string;
-      facial_expression: {
-        emotion: string;
-        description: string;
-      };
-      clothing: {
-        items: string;
-        texture: string;
-      };
-      skin_texture?: {
-        details: string;
-        imperfections: string;
-      };
-    };
-  }>;
+  style: {
+    visual_style: string;
+    color_palette: { dominant: string[]; accents: string[] };
+    lighting: { type: string; mood: string };
+  };
   presentation: {
-    style: string[];
-    materials?: { film_grain?: string };
-    camera: {
-      lens_focal_length: string;
-      aperture: string;
-      depth_of_field: string;
-      focus_target_id?: string;
-      shot_type: string;
-      angle: string;
-      aspect_ratio: string;
-    };
+    camera: { lens_focal_length: string; aperture: string; shot_type: string };
   };
 }
 

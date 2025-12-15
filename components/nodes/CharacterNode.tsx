@@ -3,6 +3,7 @@ import { Node, CharacterData } from '../../types/graph';
 import { fileToBase64 } from '../../utils/file';
 import { analyzeCharacterImage, generateReferenceAsset } from '../../services/geminiService';
 import { CharacterPassport } from '../../types/cinematicSchema';
+import { JSONInspectorModal } from '../ui/JSONInspectorModal';
 
 interface CharacterNodeProps {
   node: Node<CharacterData>;
@@ -12,17 +13,33 @@ interface CharacterNodeProps {
 // Internal component to visualize the Biometric Profile (Visual DNA)
 const PassportInspector = ({ passport }: { passport: CharacterPassport }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+
     if (!passport) return null;
     
     return (
         <div className="mt-2 bg-gray-900/80 rounded border border-blue-500/30 overflow-hidden shadow-inner">
-             <button 
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between p-2 bg-blue-900/20 text-xs font-bold text-blue-300 hover:bg-blue-900/40 transition-colors"
-            >
-                <span className="flex items-center gap-2">🧬 Biometric ID</span>
-                <span>{isOpen ? '▼' : '▶'}</span>
-            </button>
+             <div className="flex items-center justify-between bg-blue-900/20 pr-2">
+                 <button 
+                    onClick={() => setIsOpen(!isOpen)}
+                    className="flex-1 flex items-center justify-between p-2 text-xs font-bold text-blue-300 hover:bg-blue-900/40 transition-colors text-left"
+                >
+                    <span className="flex items-center gap-2">🧬 Biometric ID</span>
+                    <span>{isOpen ? '▼' : '▶'}</span>
+                </button>
+                
+                {/* BOTÓN EXPANDIR EN CABECERA */}
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        setIsModalOpen(true);
+                    }}
+                    className="text-[10px] bg-black/20 hover:bg-blue-500/30 text-blue-200 px-2 py-0.5 rounded transition-all border border-blue-500/20"
+                    title="View Full Passport JSON"
+                >
+                    ⤢
+                </button>
+             </div>
             
             {isOpen && (
                 <div className="p-2 space-y-3 text-[10px] text-gray-300 max-h-[200px] overflow-y-auto custom-scrollbar">
@@ -54,6 +71,13 @@ const PassportInspector = ({ passport }: { passport: CharacterPassport }) => {
                     </div>
                 </div>
             )}
+
+            <JSONInspectorModal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                title="Character Biometric Passport"
+                data={passport}
+            />
         </div>
     )
 }

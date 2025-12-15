@@ -9,71 +9,89 @@ export const usePersistence = (
   projectId: string = 'main-storyboard'
 ) => {
   const [status, setStatus] = useState<SavingStatus>('idle');
-  
-  // Safety Lock: Do not save until we have attempted to load at least once.
-  // This prevents overwriting the DB with an empty state on initial mount.
   const isLoadedRef = useRef(false);
+  
+  // ALMACÉN DE ESTADO: Guardamos la "huella digital" (string JSON) del último guardado exitoso.
+  const lastSavedStr = useRef<string>("");
 
-  // 1. Function to load initial data (Called once by the consumer)
+  // 1. Cargar Datos Iniciales
   const loadInitialData = useCallback(async (): Promise<Graph | null> => {
     setStatus('loading');
     try {
       const data = await loadProject(projectId);
-      isLoadedRef.current = true; // It is now safe to save future changes
+      if (data) {
+          // Generamos la huella inicial para no guardar nada más cargar
+          const content = { nodes: data.nodes, connections: data.connections };
+          lastSavedStr.current = JSON.stringify(content);
+      }
+      isLoadedRef.current = true; // Habilitamos el sistema
       setStatus('idle');
       return data || null;
     } catch (error) {
       console.error("Error loading project:", error);
       setStatus('error');
-      // Unlock to allow future saves even if load failed (e.g. fresh start)
-      isLoadedRef.current = true; 
+      isLoadedRef.current = true;
       return null;
     }
   }, [projectId]);
 
-  // 2. Auto-Save Effect (Debounced)
+  // 2. Efecto de Auto-Guardado Inteligente
   useEffect(() => {
-    // If we haven't loaded initial data yet, DO NOT save.
+    // Si no hemos cargado aún, no hacemos nada.
     if (!isLoadedRef.current) return;
 
+    // A. CREAR HUELLA DIGITAL ACTUAL
+    // Solo nos importan los nodos y las conexiones. Ignoramos timestamps, IDs de sesión, zoom, etc.
+    const currentContent = { 
+        nodes: currentGraph.nodes, 
+        connections: currentGraph.connections 
+    };
+    const currentStr = JSON.stringify(currentContent);
+
+    // B. COMPARACIÓN ESTRICTA (EL ESCUDO)
+    // Si la cadena de texto es idéntica a la última guardada, NO HAY CAMBIOS REALES.
+    if (currentStr === lastSavedStr.current) {
+        // Silenciosamente ignoramos la actualización.
+        return;
+    }
+
+    // C. Si llegamos aquí, ES PORQUE EL USUARIO CAMBIÓ ALGO.
     setStatus('saving');
 
-    let idleCallbackId: number | undefined;
-
-    // Wait 2 seconds of inactivity before saving
     const timeoutId = setTimeout(() => {
-      // NON-BLOCKING SAVE:
-      // Use requestIdleCallback to schedule serialization/saving when the main thread is free.
-      // This prevents the UI from freezing if the graph contains large images.
-      idleCallbackId = window.requestIdleCallback(async () => {
-        try {
-          await saveProject(projectId, currentGraph);
-          setStatus('saved');
-        } catch (error) {
-          console.error("Error auto-saving:", error);
-          setStatus('error');
-        }
-      });
-    }, 2000);
+        const idleId = window.requestIdleCallback(async () => {
+            try {
+                // Doble chequeo por seguridad (por si el usuario deshizo el cambio rápido)
+                if (currentStr === lastSavedStr.current) {
+                    setStatus('saved');
+                    return;
+                }
 
-    // Cleanup: If user makes changes before 2s OR before the idle callback runs, cancel everything.
-    return () => {
-      clearTimeout(timeoutId);
-      if (idleCallbackId !== undefined) {
-        window.cancelIdleCallback(idleCallbackId);
-      }
-    };
+                console.log(`💾 Persisting changes (${currentGraph.nodes.length} nodes)...`);
+                await saveProject(projectId, currentGraph);
+                
+                // Actualizamos la huella de referencia
+                lastSavedStr.current = currentStr;
+                setStatus('saved');
+            } catch (error) {
+                console.error("Error auto-saving:", error);
+                setStatus('error');
+            }
+        });
 
-  }, [currentGraph, projectId]);
+        return () => window.cancelIdleCallback(idleId);
+    }, 2000); // Debounce de 2 segundos
 
-  // 3. Manual Cleanup Function
+    return () => clearTimeout(timeoutId);
+
+  }, [currentGraph, projectId]); 
+
+  // 3. Limpieza Manual
   const clearStorage = useCallback(async () => {
-    // Block visual status to prevent confusion, though technically auto-save effect might still be pending.
-    setStatus('saving'); 
+    setStatus('saving');
     try {
       await deleteProject(projectId);
-      // Optional: Reset isLoadedRef if you want to stop subsequent auto-saves until reload
-      // isLoadedRef.current = false; 
+      lastSavedStr.current = ""; 
       setStatus('idle');
     } catch (e) {
       console.error("Error clearing storage:", e);

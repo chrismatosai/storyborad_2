@@ -1,9 +1,10 @@
 
 import React, { useState } from 'react';
 import { CinematicJSON } from '../../types/cinematicSchema';
+import { JSONInspectorModal } from './JSONInspectorModal';
 
 interface CinematicInspectorProps {
-  data: CinematicJSON | null;
+  data: any; // Allow CinematicJSON or SettingPassport
   className?: string;
   onRegenerate?: () => void;
 }
@@ -48,6 +49,7 @@ export const CinematicInspector: React.FC<CinematicInspectorProps> = ({
   onRegenerate 
 }) => {
   const [copied, setCopied] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleCopy = () => {
     if (!data) return;
@@ -55,6 +57,9 @@ export const CinematicInspector: React.FC<CinematicInspectorProps> = ({
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  // Type detection
+  const isSettingPassport = data && 'style' in data && !('subjects' in data);
 
   // If no data and no regenerate function, show simple waiting state
   if (!data && !onRegenerate) return <div className="text-xs text-gray-500 italic p-4">Waiting for generation...</div>;
@@ -64,9 +69,23 @@ export const CinematicInspector: React.FC<CinematicInspectorProps> = ({
       
       {/* HEADER WITH ACTIONS */}
       <div className="flex justify-between items-center p-2 bg-yellow-900/20 border-b border-yellow-600/30">
-        <span className="text-[10px] uppercase tracking-wider font-bold text-yellow-500">Scene Spec (JSON)</span>
+        <span className="text-[10px] uppercase tracking-wider font-bold text-yellow-500">
+            {isSettingPassport ? "Setting Spec (JSON)" : "Scene Spec (JSON)"}
+        </span>
         
         <div className="flex gap-2">
+            {/* EXPAND BUTTON */}
+            <button 
+              onClick={(e) => {
+                  e.stopPropagation(); 
+                  setIsModalOpen(true);
+              }}
+              className="text-[10px] bg-black/40 hover:bg-yellow-500/20 text-yellow-200 px-2 py-1 rounded transition-all flex items-center gap-1"
+              title="Expand JSON Inspector"
+            >
+              ⤢
+            </button>
+
             {/* RE-ROLL BUTTON */}
             {onRegenerate && (
               <button 
@@ -102,49 +121,75 @@ export const CinematicInspector: React.FC<CinematicInspectorProps> = ({
       ) : (
         <div className="max-h-[300px] overflow-y-auto custom-scrollbar">
             
-            {/* 1. GLOBALS & ATMOSPHERE */}
-            <Section title="Atmosphere & Lighting" icon="⚡" defaultOpen={true}>
-            <Row label="Desc" value={data.scene_globals?.description} />
-            <Row label="Mood" value={data.scene_globals?.mood} />
-            <div className="mt-2 pt-2 border-t border-white/5">
-                <p className="text-[10px] text-yellow-600 mb-1 uppercase">Lighting</p>
-                <Row label="Type" value={data.scene_globals?.lighting_globals?.type} />
-                <Row label="Quality" value={data.scene_globals?.lighting_globals?.quality} />
-                <Row label="Color" value={data.scene_globals?.lighting_globals?.color_temperature} />
-            </div>
-            </Section>
+            {isSettingPassport ? (
+                /* CASO A: SETTING PASSPORT (Datos de Estilo) */
+                <>
+                    <Section title="Visual Style" icon="🎨" defaultOpen={true}>
+                        <div className="text-gray-300 italic mb-2">"{data.scene_description}"</div>
+                        <Row label="Architecture" value={data.style?.visual_style} />
+                    </Section>
 
-            {/* 2. COMPOSITION */}
-            <Section title="Composition" icon="🖼️">
-            <Row label="Foreground" value={data.composition?.foreground?.description} />
-            <Row label="Midground" value={data.composition?.midground?.description} />
-            <Row label="Background" value={data.composition?.background?.description} />
-            {data.composition?.frame_element && (
-                <Row label="Framing" value={`${data.composition.frame_element.description} (${data.composition.frame_element.position})`} />
+                    <Section title="Lighting & Color" icon="💡" defaultOpen={true}>
+                        <Row label="Light Type" value={data.style?.lighting?.type} />
+                        <Row label="Mood" value={data.style?.lighting?.mood} />
+                        <div className="mt-2 pt-1 border-t border-white/5">
+                            <Row label="Dominant" value={data.style?.color_palette?.dominant} />
+                            <Row label="Accents" value={data.style?.color_palette?.accents} />
+                        </div>
+                    </Section>
+                </>
+            ) : (
+                /* CASO B: NEW CINEMATIC JSON SPEC (Schema Updated) */
+                <>
+                    {/* 1. GLOBALS */}
+                    <Section title="Scene & Mood" icon="🎬" defaultOpen={true}>
+                       <Row label="Description" value={data.scene_globals?.description} />
+                       <Row label="Mood" value={data.scene_globals?.mood} />
+                    </Section>
+
+                    {/* 2. SUBJECTS (NEW) */}
+                    <Section title="Main Subject" icon="👤" defaultOpen={true}>
+                       <Row label="Subject" value={data.subjects?.main_subject} />
+                       <Row label="Action" value={data.subjects?.action_pose} />
+                       <Row label="Expression" value={data.subjects?.expression_mood} />
+                       <Row label="Clothing" value={data.subjects?.clothing_details} />
+                    </Section>
+
+                    {/* 3. COMPOSITION */}
+                    <Section title="Composition" icon="🖼️">
+                       <Row label="Frame" value={data.composition?.frame_size} />
+                       <Row label="Angle" value={data.composition?.angle} />
+                       <Row label="Depth" value={data.composition?.depth_of_field} />
+                       <Row label="Foreground" value={data.composition?.foreground?.description} />
+                       <Row label="Background" value={data.composition?.background?.description} />
+                    </Section>
+
+                    {/* 4. STYLE */}
+                     <Section title="Style & Lighting" icon="🎨">
+                       <Row label="Visual Style" value={data.style?.visual_style} />
+                       <Row label="Lighting" value={`${data.style?.lighting?.type} (${data.style?.lighting?.mood})`} />
+                       <Row label="Palette" value={data.style?.color_palette?.dominant} />
+                       <Row label="Accents" value={data.style?.color_palette?.accents} />
+                     </Section>
+
+                    {/* 5. CAMERA */}
+                    <Section title="Camera" icon="🎥">
+                       <Row label="Lens" value={data.presentation?.camera?.lens_focal_length} />
+                       <Row label="Aperture" value={data.presentation?.camera?.aperture} />
+                       <Row label="Shot Type" value={data.presentation?.camera?.shot_type} />
+                    </Section>
+                </>
             )}
-            </Section>
-
-            {/* 3. CHARACTER */}
-            {data.character?.map((char, idx) => (
-            <Section key={idx} title={`Character: ${char.id}`} icon="👤" defaultOpen={true}>
-                <Row label="Who" value={char.description} />
-                <Row label="Action" value={char.details?.pose} />
-                <Row label="Emotion" value={char.details?.facial_expression?.emotion} />
-                <Row label="Clothing" value={char.details?.clothing?.items} />
-                <Row label="Skin" value={char.details?.skin_texture?.details} />
-            </Section>
-            ))}
-
-            {/* 4. CAMERA & TECH */}
-            <Section title="Camera & Tech" icon="🎥">
-            <Row label="Shot" value={data.presentation?.camera?.shot_type} />
-            <Row label="Lens" value={`${data.presentation?.camera?.lens_focal_length} @ ${data.presentation?.camera?.aperture}`} />
-            <Row label="Angle" value={data.presentation?.camera?.angle} />
-            <Row label="Style" value={data.presentation?.style} />
-            </Section>
-
         </div>
       )}
+
+      {/* JSON INSPECTOR MODAL */}
+      <JSONInspectorModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={isSettingPassport ? "Setting Specification" : "Cinematic Specification"}
+        data={data}
+      />
     </div>
   );
 };

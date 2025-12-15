@@ -1,7 +1,7 @@
 
 import { useState, useCallback } from 'react';
 import { Node, Connection, NodeType, ScriptData, CharacterData, SettingData, ImageData, TransformationData, VideoData, GenerationTrace } from '../types/graph';
-import { generateSceneImage, generateVeoPrompt } from '../services/geminiService';
+import { generateSceneImage, generateVeoPrompt, reverseEngineerImageSpec } from '../services/geminiService';
 import { enrichSceneDescription, fetchCharacterPassport, fetchCinematicSpec } from '../services/promptArchitect';
 
 export const useGeminiGenerator = (
@@ -40,11 +40,20 @@ export const useGeminiGenerator = (
                   }
               }
 
-              // 2. Obtener Prompt de Movimiento
-              const movement = videoNode.data.movementPrompt || "Cinematic shot";
+              // 2. Obtener Datos de Línea de Tiempo (NUEVO)
+              // Si no existen segmentos, usamos un fallback genérico.
+              const duration = videoNode.data.duration || 4;
+              const segments = videoNode.data.segments && videoNode.data.segments.length > 0 
+                  ? videoNode.data.segments 
+                  : ["Cinematic shot"];
 
-              // 3. Llamar al Cerebro VEO
-              const promptSchema = await generateVeoPrompt(startImage, endImage, movement);
+              // 3. Llamar al Cerebro VEO (Firma Actualizada: 4 argumentos)
+              const promptSchema = await generateVeoPrompt(
+                  startImage, 
+                  endImage, 
+                  duration, 
+                  segments
+              );
 
               if (!promptSchema) throw new Error("Failed to generate VEO prompt.");
 
@@ -52,8 +61,8 @@ export const useGeminiGenerator = (
               updateNodeData(videoNode.id, {
                   isLoading: false,
                   promptSchema: promptSchema,
-                  startImage, // Guardamos snapshot de qué se usó
-                  endImage
+                  // startImage/endImage ya no se guardan aquí redundante si no se quiere, 
+                  // pero está bien dejarlos para referencia visual si la UI lo usa.
               });
 
           } catch (err) {
@@ -228,5 +237,30 @@ export const useGeminiGenerator = (
     setIsGeneratingAll(false);
   }, [nodes, connections, generateImage]);
 
-  return { generateImage, generateAll, isGeneratingAll };
+  const reverseEngineer = useCallback(async (nodeId: string, imageBase64: string) => {
+      // 1. Activar estado de carga
+      updateNodeData(nodeId, { isLoading: true, error: undefined });
+
+      try {
+          // 2. Llamar al servicio de visión
+          const spec = await reverseEngineerImageSpec(imageBase64);
+
+          if (!spec) throw new Error("Could not reverse-engineer the image.");
+
+          // 3. Guardar el resultado (JSON) en el nodo
+          updateNodeData(nodeId, {
+              isLoading: false,
+              enrichedSceneJson: spec,
+              sceneEnrichmentStatus: 'success',
+              prompt: JSON.stringify(spec, null, 2) // Para que sea visible/copiable
+          });
+
+      } catch (err) {
+          console.error(err);
+          const msg = err instanceof Error ? err.message : "Reverse engineering failed";
+          updateNodeData(nodeId, { isLoading: false, error: msg });
+      }
+  }, [updateNodeData]);
+
+  return { generateImage, generateAll, isGeneratingAll, reverseEngineer };
 };

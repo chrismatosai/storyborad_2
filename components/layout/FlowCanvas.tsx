@@ -25,6 +25,7 @@ interface FlowCanvasProps {
   addScene: (nodeId: string) => void;
   deleteScene: (nodeId: string, sceneId: string) => void;
   generateImage: (node: Node<any>) => void;
+  onReverseEngineer: (nodeId: string, image: string) => void;
   // Connecting State
   connecting: { fromNodeId: string; fromOutput: string | number; toPosition: { x: number; y: number } } | null;
   connectingToPos: { x: number; y: number };
@@ -44,6 +45,7 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({
   addScene,
   deleteScene,
   generateImage,
+  onReverseEngineer,
   connecting,
   connectingToPos
 }) => {
@@ -185,6 +187,7 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({
                 node={node as Node<ImageData>}
                 updateNodeData={updateNodeData}
                 onGenerate={generateImage}
+                onReverseEngineer={onReverseEngineer}
                 connectorRefs={connectorRefs}
                 onConnectorMouseDown={onConnectorMouseDown}
               />
@@ -199,6 +202,8 @@ export const FlowCanvas: React.FC<FlowCanvasProps> = ({
                  onGenerate={generateImage}
                  connectorRefs={connectorRefs}
                  onConnectorMouseDown={onConnectorMouseDown}
+                 allNodes={nodes}
+                 allConnections={connections}
                />
             )}
           </BaseNode>

@@ -1,3 +1,4 @@
+
 import React, { useState, MutableRefObject, MouseEvent, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Node, ImageData } from '../../types/graph';
@@ -11,11 +12,21 @@ interface ImageNodeProps {
   node: Node<ImageData>;
   updateNodeData: (nodeId: string, data: Partial<ImageData>) => void;
   onGenerate: (node: Node<ImageData>) => void;
+  onReverseEngineer?: (nodeId: string, image: string) => void;
   connectorRefs: MutableRefObject<Record<string, HTMLDivElement | null>>;
   onConnectorMouseDown: (e: MouseEvent<HTMLDivElement>, nodeId: string, outputId: string | number) => void;
+  isRefConnected?: boolean;
 }
 
-export const ImageNode = React.memo(({ node, onGenerate, updateNodeData, connectorRefs, onConnectorMouseDown }: ImageNodeProps) => {
+export const ImageNode = React.memo(({ 
+    node, 
+    onGenerate, 
+    onReverseEngineer, 
+    updateNodeData, 
+    connectorRefs, 
+    onConnectorMouseDown,
+    isRefConnected 
+}: ImageNodeProps) => {
   const [isPromptOpen, setIsPromptOpen] = useState(false);
   const [showLightbox, setShowLightbox] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
@@ -163,18 +174,42 @@ export const ImageNode = React.memo(({ node, onGenerate, updateNodeData, connect
         document.body
       )}
 
-      {/* Generate Button */}
-      <button
-        onClick={() => onGenerate(node)}
-        disabled={node.data.isLoading || (!node.data.prompt && !node.data.enrichedSceneJson && !isTransformationMode)}
-        className={`w-full font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors shadow-sm ${
-            isTransformationMode ? 'bg-pink-600 hover:bg-pink-700' : 'bg-yellow-600 hover:bg-yellow-700'
-        } text-white`}
-      >
-        {node.data.isLoading ? 'Generating...' : (
-            isTransformationMode ? 'Run Transformation' : (node.data.image ? 'Regenerate (Overwrite)' : 'Generate Image')
-        )}
-      </button>
+      {/* Action Buttons */}
+      <div className="flex gap-2">
+        {/* Generate Button */}
+        <button
+            onClick={() => onGenerate(node)}
+            disabled={node.data.isLoading || (!node.data.prompt && !node.data.enrichedSceneJson && !isTransformationMode)}
+            className={`flex-1 font-bold py-2 px-4 rounded disabled:bg-gray-500 disabled:cursor-not-allowed transition-colors shadow-sm ${
+                isTransformationMode ? 'bg-pink-600 hover:bg-pink-700' : 'bg-yellow-600 hover:bg-yellow-700'
+            } text-white`}
+        >
+            {node.data.isLoading ? 'Generating...' : (
+                isTransformationMode ? 'Run Transformation' : (node.data.image ? 'Regenerate (Overwrite)' : 'Generate Image')
+            )}
+        </button>
+      </div>
+
+      {/* Botón de Ingeniería Inversa (Solo si hay imagen y NO hay JSON válido) */}
+      {node.data.image && onReverseEngineer && (!node.data.enrichedSceneJson || Object.keys(node.data.enrichedSceneJson).length === 0) && (
+          <button
+              onClick={(e) => {
+                  e.stopPropagation();
+                  onReverseEngineer(node.id, node.data.image!);
+              }}
+              disabled={node.data.isLoading}
+              className="w-full mt-1 py-1.5 rounded text-[10px] font-bold bg-purple-900/40 hover:bg-purple-800 text-purple-200 border border-purple-500/30 transition-colors flex items-center justify-center gap-2"
+              title="Generate JSON spec from this image (Reverse Engineering)"
+          >
+              {node.data.isLoading && !node.data.prompt ? (
+                  <span>🔮 Analyzing...</span>
+              ) : (
+                  <>
+                    <span>🪄 Auto-Generate Spec</span>
+                  </>
+              )}
+          </button>
+      )}
 
       {/* Error Message */}
       {node.data.error && (

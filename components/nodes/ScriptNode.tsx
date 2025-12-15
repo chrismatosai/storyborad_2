@@ -1,8 +1,57 @@
 import React, { MouseEvent, MutableRefObject, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Node, ScriptData, ScriptScene, CharacterData, SettingData } from '../../types/graph';
 import { Handle } from './Handle';
 // Importamos el parser desde la carpeta utils en la raíz (subimos 2 niveles)
 import { parseScriptCSV } from '../../utils/scriptParser'; 
+
+// --- SUBCOMPONENT: Expanded Text Editor (Modal) ---
+const ExpandedEditor = ({ 
+    isOpen, 
+    onClose, 
+    initialText, 
+    onSave, 
+    title 
+}: { 
+    isOpen: boolean; 
+    onClose: () => void; 
+    initialText: string; 
+    onSave: (text: string) => void;
+    title: string;
+}) => {
+    const [text, setText] = useState(initialText);
+    if (!isOpen) return null;
+
+    return createPortal(
+        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+            <div className="bg-gray-900 w-full max-w-3xl rounded-xl border border-purple-500/50 shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="p-3 bg-purple-900/20 border-b border-purple-500/30 flex justify-between items-center">
+                    <span className="font-bold text-purple-300 flex items-center gap-2">
+                        📝 Editing: <span className="text-white">{title}</span>
+                    </span>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>
+                </div>
+                <textarea 
+                    className="w-full h-[60vh] bg-black/20 p-4 text-sm text-gray-200 focus:outline-none resize-none font-mono leading-relaxed"
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    placeholder="Describe the scene in detail..."
+                    autoFocus
+                />
+                <div className="p-3 border-t border-gray-800 bg-gray-900 flex justify-end gap-2">
+                    <button onClick={onClose} className="px-4 py-2 rounded text-xs text-gray-400 hover:text-white">Cancel</button>
+                    <button 
+                        onClick={() => { onSave(text); onClose(); }}
+                        className="px-6 py-2 rounded bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold"
+                    >
+                        Save & Close
+                    </button>
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
+};
 
 // --- SUBCOMPONENT: Setting Selector (Checkboxes) ---
 const SettingSelector = ({ connectedSettings, selectedId, onSelect }: { 
@@ -34,7 +83,7 @@ const SettingSelector = ({ connectedSettings, selectedId, onSelect }: {
                 onChange={() => onSelect(isSelected ? undefined : setting.id)}
                 className="hidden"
             />
-            <span className={isSelected ? 'text-green-400' : 'text-gray-600'}>
+            <span className="text-green-400">
                 {isSelected ? '☑' : '☐'}
             </span>
             <span className="max-w-[60px] truncate">
@@ -58,6 +107,7 @@ interface SceneModuleProps {
   connectedSettings: Node<SettingData>[];
   onConnectorMouseDown: (e: MouseEvent<HTMLDivElement>, nodeId: string, outputId: string) => void;
   connectorRefs: MutableRefObject<Record<string, HTMLDivElement | null>>;
+  onOpenEditor: (sceneId: string, text: string, title: string) => void;
 }
 
 const SceneModule: React.FC<SceneModuleProps> = ({
@@ -71,6 +121,7 @@ const SceneModule: React.FC<SceneModuleProps> = ({
   connectedSettings,
   onConnectorMouseDown,
   connectorRefs,
+  onOpenEditor,
 }) => {
   
   return (
@@ -82,9 +133,18 @@ const SceneModule: React.FC<SceneModuleProps> = ({
                 <span className="font-bold text-[10px] text-purple-400 uppercase tracking-wide">
                     Scene {index + 1}
                 </span>
+                
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onOpenEditor(scene.id, scene.description, scene.title); }}
+                    className="ml-2 text-gray-500 hover:text-purple-400 font-bold text-xs"
+                    title="Expand Editor"
+                >
+                    ⤢
+                </button>
+
                 <div 
                     onClick={() => toggleSceneExpanded(scene.id)}
-                    className="cursor-pointer text-gray-400 hover:text-white text-[10px]"
+                    className="cursor-pointer text-gray-400 hover:text-white text-[10px] ml-1"
                 >
                     {scene.isExpanded ? '▼' : '▶'}
                 </div>
@@ -174,6 +234,7 @@ export const ScriptNode = React.memo(({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pasteText, setPasteText] = useState("");
   const [showPaste, setShowPaste] = useState(false);
+  const [editorState, setEditorState] = useState<{ isOpen: boolean; sceneId: string; text: string; title: string } | null>(null);
 
   // Filtering connected nodes based on type
   const connectedCharacter = connectedNodes.find(n => n.type === 'CHARACTER') as Node<CharacterData> | undefined;
@@ -320,7 +381,7 @@ export const ScriptNode = React.memo(({
       </div>
 
       {/* SCENES LIST */}
-      <div className="space-y-1 max-h-[400px] overflow-y-auto custom-scrollbar pr-4 p-1 mt-2">
+      <div className="space-y-2 mt-2">
         {node.data.scenes.length === 0 ? (
             <div className="text-center py-6 text-gray-500 text-xs italic border border-dashed border-gray-700 rounded">
                 No scenes yet. <br/>Paste CSV or Upload.
@@ -339,6 +400,7 @@ export const ScriptNode = React.memo(({
                 connectedSettings={connectedSettings}
                 onConnectorMouseDown={onConnectorMouseDown}
                 connectorRefs={connectorRefs}
+                onOpenEditor={(id, txt, title) => setEditorState({ isOpen: true, sceneId: id, text: txt, title })}
             />
             ))
         )}
@@ -350,6 +412,17 @@ export const ScriptNode = React.memo(({
       >
         + Add Scene Manually
       </button>
+
+      {/* Modal Render */}
+      {editorState && (
+        <ExpandedEditor 
+            isOpen={editorState.isOpen}
+            initialText={editorState.text}
+            title={editorState.title}
+            onClose={() => setEditorState(null)}
+            onSave={(newText) => updateSceneDescription(editorState.sceneId, newText)}
+        />
+      )}
     </div>
   );
 });

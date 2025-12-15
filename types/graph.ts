@@ -93,6 +93,10 @@ export interface VideoData extends NodeData {
   startImage?: string;
   endImage?: string;
   movementPrompt?: string;
+  
+  // --- TIMELINE FIELDS ---
+  duration: number;        // Total seconds (usually 8 for Veo)
+  segments: string[];      // Array of action descriptions.
 }
 
 export type AnyNodeData = CharacterData | SettingData | ScriptData | ImageData | TransformationData | VideoData;

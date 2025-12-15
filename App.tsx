@@ -12,6 +12,7 @@ import { usePersistence } from './hooks/usePersistence';
 // UI Components
 import { NODE_CONFIG } from './components/nodes/nodeConfig';
 import { FlowCanvas } from './components/layout/FlowCanvas';
+import { MiniMap } from './components/ui/MiniMap';
 
 // Main App Component
 export default function App() {
@@ -35,28 +36,6 @@ export default function App() {
   const [isReady, setIsReady] = useState(false);
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
 
-  // Initial Load Effect
-  useEffect(() => {
-    const init = async () => {
-      console.log("📂 Persistence: Loading project...");
-      try {
-        const savedGraph = await loadInitialData();
-        
-        if (savedGraph && savedGraph.nodes.length > 0) {
-          console.log("✅ Persistence: Project loaded.");
-          actions.setGraph(savedGraph); 
-        } else {
-          console.log("ℹ️ Persistence: No saved project found, starting fresh.");
-        }
-      } catch (e) {
-        console.error("❌ Persistence: Error recovering data:", e);
-      } finally {
-         setIsReady(true);
-      }
-    };
-    init();
-  }, [loadInitialData, actions.setGraph]);
-
   const { 
     viewTransform, 
     setViewTransform, 
@@ -65,8 +44,75 @@ export default function App() {
     handlers: viewportHandlers 
   } = useViewport();
 
+  // Initial Load Effect with Auto-Fit
+  useEffect(() => {
+    const init = async () => {
+      console.log("📂 Persistence: Loading project...");
+      try {
+        const savedGraph = await loadInitialData();
+        
+        if (savedGraph && savedGraph.nodes.length > 0) {
+          console.log("✅ Persistence: Project loaded.");
+          actions.setGraph(savedGraph);
+          
+          // --- AUTO-FIT LOGIC ---
+          // 1. Calcular los límites (Bounding Box) de todos los nodos
+          const nodes = savedGraph.nodes;
+          if (nodes.length === 0) return;
+
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          
+          nodes.forEach(node => {
+              // Asumimos un ancho/alto promedio si no está definido (ej: 300x300) para asegurar margen
+              const width = 300; 
+              const height = 300;
+              if (node.position.x < minX) minX = node.position.x;
+              if (node.position.y < minY) minY = node.position.y;
+              if (node.position.x + width > maxX) maxX = node.position.x + width;
+              if (node.position.y + height > maxY) maxY = node.position.y + height;
+          });
+
+          // 2. Calcular dimensiones del contenido y de la pantalla
+          const contentW = maxX - minX;
+          const contentH = maxY - minY;
+          const screenW = window.innerWidth;
+          const screenH = window.innerHeight;
+          const padding = 100; // Margen visual
+
+          // 3. Calcular Zoom ideal (con límites de 0.2 a 1)
+          const zoomX = (screenW - padding * 2) / contentW;
+          const zoomY = (screenH - padding * 2) / contentH;
+          let targetZoom = Math.min(zoomX, zoomY);
+          targetZoom = Math.max(0.2, Math.min(1, targetZoom)); // Clamp
+
+          // 4. Calcular el centro (Pan)
+          // Fórmula: CenterScreen - (CenterContent * Zoom)
+          const contentCenterX = minX + contentW / 2;
+          const contentCenterY = minY + contentH / 2;
+          
+          const targetX = (screenW / 2) - (contentCenterX * targetZoom);
+          const targetY = (screenH / 2) - (contentCenterY * targetZoom);
+
+          // 5. Aplicar transformación
+          setViewTransform({ x: targetX, y: targetY, zoom: targetZoom });
+          console.log("🔭 Auto-Fit applied");
+
+        } else {
+          console.log("ℹ️ Persistence: No saved project found.");
+          // Centrar en el origen por defecto
+          setViewTransform({ x: window.innerWidth/2 - 100, y: window.innerHeight/2 - 50, zoom: 1 });
+        }
+      } catch (e) {
+        console.error("❌ Persistence: Error recovering data:", e);
+      } finally {
+         setIsReady(true);
+      }
+    };
+    init();
+  }, [loadInitialData, actions.setGraph, setViewTransform]);
+
   // Use the new Gemini Generator Hook
-  const { generateImage, generateAll, isGeneratingAll } = useGeminiGenerator(nodes, connections, actions.updateNodeData);
+  const { generateImage, generateAll, isGeneratingAll, reverseEngineer } = useGeminiGenerator(nodes, connections, actions.updateNodeData);
 
   // Use Smart Connections for Eager Enrichment (Character/Setting)
   useSmartConnections(nodes, connections, actions.updateNodeData);
@@ -202,6 +248,24 @@ export default function App() {
 
   const connectingToPos = connecting ? screenToWorld(connecting.toPosition) : {x:0,y:0};
 
+  const handleAddNode = (type: NodeType) => {
+    // 1. Obtener dimensiones de la ventana
+    const screenW = window.innerWidth;
+    const screenH = window.innerHeight;
+
+    // 2. Calcular el centro en coordenadas de pantalla
+    const screenCenterX = screenW / 2;
+    const screenCenterY = screenH / 2;
+
+    // 3. Proyectar al "Mundo" del Canvas usando la transformación actual (ViewTransform)
+    // Fórmula: (ScreenCoord - Pan) / Zoom
+    // Restamos un offset (ej: 150px en X, 100px en Y) para que el nodo quede centrado visualmente y no su esquina.
+    const worldX = (screenCenterX - viewTransform.x) / viewTransform.zoom - 100;
+    const worldY = (screenCenterY - viewTransform.y) / viewTransform.zoom - 50;
+
+    actions.addNode(type, { x: worldX, y: worldY });
+  };
+
   // 🆕 Loading Screen Logic
   if (!isReady) {
     return (
@@ -295,6 +359,7 @@ export default function App() {
         addScene={actions.addScene}
         deleteScene={actions.deleteScene}
         generateImage={generateImage}
+        onReverseEngineer={reverseEngineer}
         connecting={connecting}
         connectingToPos={connectingToPos}
       />
@@ -309,6 +374,12 @@ export default function App() {
             {persistenceStatus === 'error' && <span className="flex items-center gap-1 text-red-400"><span>⚠️</span> Error</span>}
         </div>
       </div>
+
+      <MiniMap 
+        nodes={nodes}
+        viewTransform={viewTransform}
+        setViewTransform={setViewTransform}
+      />
 
       {/* Node Toolbar (Bottom Left - Floating Pills) */}
       <div className="absolute bottom-4 left-4 z-50 flex gap-2 items-end">
@@ -343,7 +414,7 @@ export default function App() {
             return (
               <button
                 key={key as string}
-                onClick={() => actions.addNode(NodeType[key])}
+                onClick={() => handleAddNode(NodeType[key])}
                 className={`
                   flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold text-white transition-all duration-200 shadow-md hover:scale-105 hover:shadow-lg border border-white/10
                   ${config.color}

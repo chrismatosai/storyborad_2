@@ -1,7 +1,8 @@
+
 import { GoogleGenAI, Modality } from "@google/genai";
 import type { Part } from "@google/genai";
 import { safeJsonParse } from "../utils/jsonRepair";
-import { CharacterPassport, SettingPassport } from "../types/cinematicSchema";
+import { CharacterPassport, SettingPassport, CinematicJSON } from "../types/cinematicSchema";
 import { VideoPrompt } from "../types/videoSchema";
 
 export interface GenerationPayload {
@@ -233,12 +234,13 @@ export const generateReferenceAsset = async (prompt: string): Promise<string> =>
 };
 
 /**
- * Generates a VEO-compatible JSON prompt based on start/end frames and user description.
+ * Generates a VEO-compatible JSON prompt based on start/end frames and user timeline.
  */
 export const generateVeoPrompt = async (
   startImage: string | undefined, 
   endImage: string | undefined, 
-  movementText: string
+  duration: number,
+  segments: string[]
 ): Promise<VideoPrompt | null> => {
     if (!process.env.API_KEY) return null;
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -246,15 +248,26 @@ export const generateVeoPrompt = async (
     // Validación básica
     if (!startImage && !endImage) throw new Error("At least one image is required.");
 
+    // Construir descripción de la línea de tiempo
+    const timelineDescription = segments.map((seg, idx) => {
+        const timePerSeg = duration / segments.length;
+        const start = (idx * timePerSeg).toFixed(1);
+        const end = ((idx + 1) * timePerSeg).toFixed(1);
+        return `- [${start}s - ${end}s]: ${seg}`;
+    }).join('\n');
+
     const parts: Part[] = [];
     
-    // Instrucción Maestra
+    // Instrucción Maestra Actualizada
     parts.push({ text: `
     ROLE: Expert AI Video Director using Google VEO.
-    TASK: Create a precise JSON specification for a video shot based on the provided assets and movement description.
+    TASK: Create a precise JSON specification for a video shot based on the provided assets and TIMELINE.
     
-    INPUTS:
-    - Movement/Action Goal: "${movementText}"
+    INPUT CONTEXT:
+    - Total Duration: ${duration} seconds.
+    - Timeline / Action Sequence:
+    ${timelineDescription}
+
     - Start Frame: Provided (if any)
     - End Frame: Provided (if any)
 
@@ -262,8 +275,9 @@ export const generateVeoPrompt = async (
     
     REQUIREMENTS:
     1. Analyze the images to infer the "actors", "scene", "style", and "camera" details.
-    2. Fill in the "sequence" array to describe how the video transitions from Start to End using the requested Movement.
-    3. Do NOT halluncinate assets not present, but describe those present in great detail.
+    2. POPULATE the "sequence" array strictly matching the "Timeline" provided above. 
+       - If the user defined 2 segments, the JSON "sequence" must have 2 events with the exact start/end times.
+    3. Do NOT hallucinate assets not present, but describe those present in great detail.
 
     TARGET JSON SCHEMA:
     {
@@ -274,7 +288,7 @@ export const generateVeoPrompt = async (
             "model_target": "veo-3.1-generate-preview"
         },
         "output_specifications": {
-            "duration_seconds": 8.0,
+            "duration_seconds": ${duration},
             "resolution": "1080p",
             "aspect_ratio": "16:9",
             "fps": 24
@@ -299,7 +313,7 @@ export const generateVeoPrompt = async (
             "time_of_day": "Inferred...",
             "weather": "Inferred..."
         },
-        "scene_description": "A concise prompt describing the full 8s shot...",
+        "scene_description": "A concise prompt describing the full shot...",
         "style": {
             "visual_style": "Cinematic, Photorealistic...",
             "lighting": { "type": "String" }
@@ -311,8 +325,8 @@ export const generateVeoPrompt = async (
         "sequence": [
             {
             "start_time": "0.0s",
-            "end_time": "8.0s",
-            "description": "Detailed narrative of the action...",
+            "end_time": "X.Xs",
+            "description": "Narrative of this segment...",
             "actions": ["Action 1", "Action 2"]
             }
         ],
@@ -330,7 +344,7 @@ export const generateVeoPrompt = async (
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash', // Usamos el modelo multimodal estándar para analizar y escribir JSON
+            model: 'gemini-2.5-flash', 
             contents: { parts },
             config: { responseMimeType: 'application/json' }
         });
@@ -339,5 +353,83 @@ export const generateVeoPrompt = async (
     } catch (e) {
         console.error("VEO Prompt generation failed:", e);
         throw e;
+    }
+};
+
+/**
+ * REVERSE ENGINEERING: Takes an existing image Base64 and asks AI to generate
+ * a plausible CinematicJSON specification that could have created it.
+ */
+export const reverseEngineerImageSpec = async (imageBase64: string): Promise<CinematicJSON | null> => {
+    if (!process.env.API_KEY) {
+        console.error("API Key missing for reverse engineering.");
+        return null;
+    }
+
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const imagePart = fileToPart(imageBase64, 'image/png');
+
+    const prompt = `
+    ROLE: ExpertCinematographerAI and Costume Designer.
+    TASK: Analyze the provided image thoroughly. Reverse-engineer a precise technical AND creative specification.
+    CRITICAL: You MUST describe the main subject(s), their clothing, and appearance in high detail in the 'subjects' section.
+
+    OUTPUT FORMAT: Strictly JSON only, matching the schema below. Do NOT use markdown blocks.
+
+    TARGET SCHEMA:
+    interface CinematicJSON {
+      subjects: {
+        main_subject: string; // DETAILED description of who is in the shot.
+        clothing_details: string; // Specific materials, colors, style of clothes.
+        action_pose: string;
+        expression_mood: string;
+      };
+      scene_globals: {
+        description: string; // Concise visual summary of the whole frame.
+        mood: string;
+      };
+      composition: {
+        frame_size: "Wide Shot" | "Medium Shot" | "Close-up" | etc;
+        depth_of_field: "Deep Focus" | "Shallow Focus" | etc;
+        angle: "Eye Level" | "Low Angle" | "High Angle";
+        foreground: { description: string };
+        background: { description: string };
+      };
+      style: {
+        visual_style: string; // e.g., "Cyberpunk", "Noir", "Standard Film"
+        color_palette: { dominant: string[]; accents: string[] };
+        lighting: { type: string; mood: string };
+      };
+      presentation: {
+        camera: { lens_focal_length: string; aperture: string; shot_type: string };
+      };
+    }
+
+    INSTRUCTIONS:
+    1. Look closely at the subject's face, hair, clothing texture, and accessories. Describe them richly.
+    2. Infer camera and lighting details from shadows and perspective.
+    3. Ensure the output is valid, parseable JSON only.
+    `;
+
+    try {
+        console.log("🕵️‍♂️ Reverse-engineering image spec...");
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: {
+                parts: [
+                    { text: prompt },
+                    imagePart
+                ]
+            },
+            config: {
+                responseMimeType: 'application/json'
+            }
+        });
+
+        return safeJsonParse<CinematicJSON>(response.text, {} as CinematicJSON);
+
+    } catch (error) {
+        console.error("❌ Failed to reverse-engineer image spec:", error);
+        return null;
     }
 };

@@ -17,7 +17,15 @@ export const useGraphEditor = () => {
             initialData = { prompt: '', isLoading: false };
             break;
         case NodeType.Video:
-             initialData = { isLoading: false, startImage: undefined, endImage: undefined, videoUrl: undefined };
+             initialData = { 
+               isLoading: false, 
+               startImage: undefined, 
+               endImage: undefined, 
+               videoUrl: undefined,
+               duration: 8,
+               segments: [],
+               movementPrompt: ''
+             };
              break;
         default:
              initialData = { prompt: '', image: undefined };
